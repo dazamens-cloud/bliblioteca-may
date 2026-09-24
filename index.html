@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mi Biblioteca</title>
+  <meta name="description" content="Tu biblioteca personal: libros, lecturas y sagas">
+  <meta name="theme-color" content="#fcf9f4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#12161f" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400..700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+  <!-- Solo los iconos que usa la app (~22 KB). Si se añade uno: mantener orden alfabético -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300..600,0..1,0&icon_names=add,arrow_forward,auto_stories,barcode_scanner,bookmark_border,check,check_circle,close,cloud_done,cloud_off,collections_bookmark,delete,done_all,download,edit_note,favorite,help_outline,library_add,local_library,menu_book,pause,schedule,search,settings,shelves,smartphone,star,sync,task_alt,travel_explore,upload,warning&display=block">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="top">
+    <img src="icons/icon.svg" alt="">
+    <div class="marca">
+      <h1>Mi Biblioteca</h1>
+      <div class="seccion" id="nombreSeccion">Biblioteca</div>
+    </div>
+    <button id="syncEstado" class="sync" data-ir="screenAjustes"></button>
+  </header>
+
+  <main>
+    <!-- BIBLIOTECA -->
+    <section id="screenBiblioteca" class="screen active">
+      <div id="panelResumen"></div>
+      <div id="chips" class="chips"></div>
+      <div class="buscador">
+        <span class="ic">search</span>
+        <input id="buscador" type="search" placeholder="Buscar por título, autor, saga o balda" autocomplete="off">
+      </div>
+      <div id="listaLibros" class="lista"></div>
+    </section>
+
+    <!-- AÑADIR -->
+    <section id="screenAnadir" class="screen">
+      <button id="btnEscanear" class="btn grande"><span class="ic">barcode_scanner</span>Escanear código de barras</button>
+
+      <div id="escaner" class="escaner" hidden>
+        <video id="video" playsinline muted></video>
+        <div class="marco"><i></i><i></i><i></i><i></i><div class="laser"></div></div>
+        <div class="pista">Apunta al código de barras del libro</div>
+        <button id="btnPararEscaner" class="btn">Cancelar</button>
+      </div>
+
+      <div class="separador">o búscalo</div>
+
+      <form id="formIsbn" class="buscar">
+        <input id="inputIsbn" inputmode="numeric" placeholder="ISBN (ej. 97884…)" autocomplete="off">
+        <button class="btn secundario">Buscar</button>
+      </form>
+
+      <form id="formTexto" class="buscar">
+        <input id="inputTexto" type="search" placeholder="Título o autor" autocomplete="off">
+        <button class="btn secundario">Buscar</button>
+      </form>
+
+      <button id="btnManual" class="btn-link">o añádelo a mano</button>
+
+      <div id="resultados" class="lista"></div>
+    </section>
+
+    <!-- SAGAS -->
+    <section id="screenSagas" class="screen">
+      <div id="chipsSagas" class="chips"></div>
+      <div id="listaSagas" class="lista"></div>
+      <button id="btnNuevaSaga" class="btn secundario"><span class="ic">add</span>Crear una saga a mano</button>
+    </section>
+
+    <!-- AJUSTES -->
+    <section id="screenAjustes" class="screen">
+      <h2>Google Sheets</h2>
+      <p class="sub">Sin conectar, los libros se guardan solo en este móvil. Conectado, se guardan también en tu hoja y los ves desde cualquier dispositivo.</p>
+      <p class="estado-sync" id="infoSync"></p>
+
+      <form id="formConexion" class="tarjeta">
+        <label>URL de la aplicación web (acaba en /exec)
+          <input id="cfgUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
+        </label>
+        <label>Token
+          <input id="cfgToken" type="password" autocomplete="off">
+        </label>
+        <button class="btn">Guardar y conectar</button>
+      </form>
+
+      <div id="bloqueConectado" class="fila-botones" hidden>
+        <button id="btnSincronizar" class="btn secundario"><span class="ic">sync</span>Sincronizar</button>
+        <button id="btnDesconectar" class="btn peligro">Desconectar</button>
+      </div>
+
+      <h2>Copia de seguridad</h2>
+      <p class="sub">Un fichero con todos tus libros y sagas.</p>
+      <div class="fila-botones">
+        <button id="btnExportar" class="btn secundario"><span class="ic">download</span>Exportar</button>
+        <label class="btn secundario"><span class="ic">upload</span>Importar
+          <input id="inputImportar" type="file" accept="application/json,.json" hidden>
+        </label>
+      </div>
+
+      <p class="creditos">Datos de libros: Open Library y Wikidata.</p>
+    </section>
+  </main>
+
+  <nav class="bottom">
+    <button data-screen="screenBiblioteca" class="active"><span class="ic">auto_stories</span>Biblioteca</button>
+    <button data-screen="screenSagas"><span class="ic">collections_bookmark</span>Sagas</button>
+    <button data-screen="screenAnadir" class="central" aria-label="Añadir libro"><span class="circulo"><span class="ic">add</span></span></button>
+    <button data-screen="screenAjustes"><span class="ic">settings</span>Ajustes</button>
+  </nav>
+
+  <div id="modal" class="modal" hidden>
+    <div id="modalHoja" class="hoja"></div>
+  </div>
+
+  <div id="toast" class="toast" role="status"></div>
+
+  <script src="sagas.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
