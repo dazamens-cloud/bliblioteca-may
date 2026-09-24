@@ -30,10 +30,19 @@ Funciona también **sin** la hoja: los datos se guardan en el móvil (localStora
    **token** en el registro de ejecución.
 4. **Implementar → Nueva implementación → Aplicación web**. Ejecutar como: yo. Acceso:
    cualquier usuario. Copiar la URL `/exec`.
-5. En la app: **Ajustes** → pegar la URL y el token.
+5. Pegar la URL y el token al principio de `script.js`, en `URL_SCRIPT` y
+   `WEB_APP_TOKEN`, y hacer commit. Igual que en Control-cocina: cualquier dispositivo
+   que abra la app se conecta solo, sin tocar Ajustes.
 
-La URL y el token se guardan **solo en el móvil**, no en el código: el repositorio
-puede ser público sin exponer nada.
+La primera vez que un dispositivo se conecta, sus libros se **combinan** con los de la
+hoja: no se pierde nada de ninguno de los dos.
+
+Si `URL_SCRIPT` y `WEB_APP_TOKEN` se dejan vacías, la conexión se hace a mano desde
+**Ajustes** y se guarda solo en ese móvil.
+
+Ojo: el repositorio es público, así que el token queda a la vista de quien mire el
+código (igual que en Control-cocina). Con él se pueden leer y cambiar los libros de la
+hoja, nada más de tu cuenta de Google.
 
 Opcional: propiedad del script `GOOGLE_BOOKS_KEY` con una clave de Google Books
 (gratis). Sin ella, la búsqueda usa solo Open Library, que suele bastar.
@@ -42,7 +51,7 @@ Opcional: propiedad del script `GOOGLE_BOOKS_KEY` con una clave de Google Books
 
 **Implementar → Nueva implementación.** Redesplegar la existente no sirve el código
 nuevo (dos de dos veces en Control-cocina). La nueva implementación da otra URL, que hay
-que volver a pegar en Ajustes.
+que cambiar en `URL_SCRIPT` de `script.js`.
 
 Los campos nuevos de `CAMPOS_LIBRO` van siempre **al final**: las filas se leen por
 posición.

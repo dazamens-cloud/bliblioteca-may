@@ -1,9 +1,16 @@
 // =============================================
 // script.js - Mi Biblioteca
 // Los datos viven en el móvil (localStorage). Si hay una hoja de Google
-// conectada (Ajustes), cada cambio se envía también allí.
+// conectada, cada cambio se envía también allí.
 // La detección de sagas está en sagas.js.
 // =============================================
+
+// Conexión con la hoja, como en Control-cocina: en el código, así cualquier
+// dispositivo que abra la app se conecta solo. Vacías = se configura en Ajustes.
+// ⚠️ Cada implementación nueva de Apps Script da otra URL: cambiarla aquí.
+const URL_SCRIPT    = '';
+const WEB_APP_TOKEN = '';
+const configEnCodigo = () => !!(URL_SCRIPT && WEB_APP_TOKEN);
 
 const LS = { libros: 'mb_libros', sagas: 'mb_sagas', cola: 'mb_cola', config: 'mb_config', filtro: 'mb_filtro' };
 
@@ -92,9 +99,14 @@ function cargarLocal() {
   libros = leerLS(LS.libros, []).map(normalizarLibro);
   sagas  = leerLS(LS.sagas, []).map(normalizarSaga);
   cola   = leerLS(LS.cola, []);
-  config = leerLS(LS.config, {});
+  config = configInicial();
   filtro = leerLS(LS.filtro, 'todos');
   if (!FILTROS[filtro]) filtro = 'todos';
+}
+
+// La del código manda; si no hay, la que se guardó desde Ajustes
+function configInicial() {
+  return configEnCodigo() ? { url: URL_SCRIPT, token: WEB_APP_TOKEN } : leerLS(LS.config, {});
 }
 
 function guardarLocal() {
@@ -189,6 +201,9 @@ async function vaciarCola() {
 // Trae la hoja y reemplaza lo local. Solo si no quedan cambios sin enviar.
 async function descargar() {
   if (!conectado() || !navigator.onLine) return;
+  // Primera vez con esta URL en este dispositivo (o URL nueva en el código):
+  // combinar en vez de reemplazar, para no perder libros que solo estén aquí
+  if (leerLS(LS.config, {}).url !== config.url) return conectarHoja(config.url, config.token);
   await vaciarCola();
   if (cola.length) return;
   try {
@@ -233,7 +248,7 @@ async function conectarHoja(url, token) {
     toast('✅ Conectado. ' + libros.length + ' libros sincronizados.');
     renderTodo();
   } catch (e) {
-    config = leerLS(LS.config, {});
+    config = configInicial();
     toast('❌ No se pudo conectar: ' + esc(e.message), { ms: 6000 });
   }
 }
@@ -1010,6 +1025,9 @@ function abrirPreview(d, aviso) {
 function renderAjustes() {
   $('#cfgUrl').value = config.url || '';
   $('#cfgToken').value = config.token || '';
+  $('#formConexion').hidden = configEnCodigo();
+  $('#cfgCodigo').hidden = !configEnCodigo();
+  $('#btnDesconectar').hidden = configEnCodigo();
   $('#bloqueConectado').hidden = !conectado();
   pintarSync();
 }

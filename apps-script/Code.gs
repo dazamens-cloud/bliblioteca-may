@@ -6,7 +6,7 @@
 //
 // Primera vez: ejecutar setup() desde el editor.
 // Crea las pestañas LIBROS y SAGAS y genera el TOKEN
-// (se ve en el registro de ejecución).
+// (se ve en el registro de ejecución; va en WEB_APP_TOKEN de script.js).
 //
 // ⚠️ Al cambiar este código: Implementar → NUEVA implementación.
 // Redesplegar la existente no sirve el código nuevo (ver README).
@@ -46,7 +46,7 @@ function setup() {
     props.setProperty('TOKEN', token);
   }
   Logger.log('Hoja: ' + ss.getUrl());
-  Logger.log('TOKEN (cópialo en Ajustes de la app): ' + token);
+  Logger.log('TOKEN (cópialo en WEB_APP_TOKEN de script.js): ' + token);
 }
 
 // ── ENTRADA ───────────────────────────────────
