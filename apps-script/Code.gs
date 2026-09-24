@@ -1,7 +1,8 @@
 // =============================================
 // Code.gs - Mi Biblioteca (backend)
-// Script vinculado a la hoja de cálculo:
-//   Hoja → Extensiones → Apps Script
+// Vale vinculado a una hoja (Hoja → Extensiones → Apps Script) o suelto
+// (creado en script.google.com): en ese caso setup() crea la hoja
+// "Mi Biblioteca" y guarda su id en la propiedad SHEET_ID.
 //
 // Primera vez: ejecutar setup() desde el editor.
 // Crea las pestañas LIBROS y SAGAS y genera el TOKEN
@@ -22,7 +23,13 @@ const HOJAS = { LIBROS: CAMPOS_LIBRO, SAGAS: CAMPOS_SAGA };
 // ── SETUP ─────────────────────────────────────
 
 function setup() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const props = PropertiesService.getScriptProperties();
+  let ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss && props.getProperty('SHEET_ID')) ss = SpreadsheetApp.openById(props.getProperty('SHEET_ID'));
+  if (!ss) {
+    ss = SpreadsheetApp.create('Mi Biblioteca');
+    props.setProperty('SHEET_ID', ss.getId());
+  }
   Object.keys(HOJAS).forEach(function (nombre) {
     let hoja = ss.getSheetByName(nombre);
     if (!hoja) hoja = ss.insertSheet(nombre);
@@ -33,12 +40,12 @@ function setup() {
     hoja.setFrozenRows(1);
   });
 
-  const props = PropertiesService.getScriptProperties();
   let token = props.getProperty('TOKEN');
   if (!token) {
     token = Utilities.getUuid().replace(/-/g, '');
     props.setProperty('TOKEN', token);
   }
+  Logger.log('Hoja: ' + ss.getUrl());
   Logger.log('TOKEN (cópialo en Ajustes de la app): ' + token);
 }
 
@@ -85,7 +92,7 @@ function doPost(e) {
 // ── DATOS ─────────────────────────────────────
 
 function leer(nombre) {
-  const hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nombre);
+  const hoja = obtenerHoja(nombre);
   const campos = HOJAS[nombre];
   const n = hoja.getLastRow() - 1;
   if (n < 1) return [];
@@ -103,7 +110,7 @@ function leer(nombre) {
 
 function guardar(nombre, obj) {
   if (!obj || !obj.id) return;
-  const hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nombre);
+  const hoja = obtenerHoja(nombre);
   const campos = HOJAS[nombre];
   const fila = campos.map(function (c) {
     const v = obj[c];
@@ -118,7 +125,7 @@ function guardar(nombre, obj) {
 }
 
 function borrar(nombre, id) {
-  const hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nombre);
+  const hoja = obtenerHoja(nombre);
   const n = buscarFila(hoja, id);
   if (n) hoja.deleteRow(n);
 }
@@ -128,6 +135,13 @@ function buscarFila(hoja, id) {
   const celda = hoja.getRange(2, 1, hoja.getLastRow() - 1, 1)
     .createTextFinder(String(id)).matchEntireCell(true).findNext();
   return celda ? celda.getRow() : 0;
+}
+
+// La hoja vinculada, o la que creó setup() si el script va suelto
+function obtenerHoja(nombre) {
+  const id = PropertiesService.getScriptProperties().getProperty('SHEET_ID');
+  const ss = id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();
+  return ss.getSheetByName(nombre);
 }
 
 // ── GOOGLE BOOKS (la clave no sale del servidor) ──
