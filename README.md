@@ -24,25 +24,39 @@ Funciona también **sin** la hoja: los datos se guardan en el móvil (localStora
 
 ## Poner en marcha la hoja
 
+Una sola hoja y un solo Apps Script para todos. Cada persona tiene su **perfil**, con
+sus propias pestañas (`LIBROS_ana`, `SAGAS_ana`), y entra con su **PIN**.
+
 1. Crear una hoja de cálculo → **Extensiones → Apps Script**.
 2. Pegar `apps-script/Code.gs` y guardar.
-3. Ejecutar **`setup`** una vez. Crea las pestañas `LIBROS` y `SAGAS` y escribe el
-   **token** en el registro de ejecución.
-4. **Implementar → Nueva implementación → Aplicación web**. Ejecutar como: yo. Acceso:
+3. Ejecutar **`setup`** una vez (genera el secreto con el que se firman las sesiones).
+4. Crear los perfiles: ⚙️ **Configuración del proyecto → Propiedades del script** →
+   añadir `PIN_david` = `1234`, `PIN_ana` = `5678`… (el nombre en minúsculas, sin
+   espacios ni tildes). Las pestañas se crean solas la primera vez que alguien entra.
+5. **Implementar → Nueva implementación → Aplicación web**. Ejecutar como: yo. Acceso:
    cualquier usuario. Copiar la URL `/exec`.
-5. Pegar la URL y el token al principio de `script.js`, en `URL_SCRIPT` y
-   `WEB_APP_TOKEN`, y hacer commit. Igual que en Control-cocina: cualquier dispositivo
-   que abra la app se conecta solo, sin tocar Ajustes.
+6. Pegar la URL al principio de `script.js`, en `URL_SCRIPT`, y hacer commit.
+7. En cada móvil: **Ajustes** → elegir el perfil → PIN → Entrar. Solo la primera vez.
 
-La primera vez que un dispositivo se conecta, sus libros se **combinan** con los de la
-hoja: no se pierde nada de ninguno de los dos.
+**Añadir a alguien:** otra propiedad `PIN_nombre`. No hay que tocar el código ni
+redesplegar. **Cambiar un PIN** cierra la sesión de ese perfil en todos los móviles.
 
-Si `URL_SCRIPT` y `WEB_APP_TOKEN` se dejan vacías, la conexión se hace a mano desde
-**Ajustes** y se guarda solo en ese móvil.
+Los PIN **no** están en el repositorio: viven en las propiedades del script, que solo
+ve el dueño del Apps Script. Tras 5 PIN incorrectos seguidos, el perfil se bloquea
+15 minutos. Todo se guarda en la hoja de quien creó el Apps Script; los demás no la
+ven salvo que se la compartan.
 
-Ojo: el repositorio es público, así que el token queda a la vista de quien mire el
-código (igual que en Control-cocina). Con él se pueden leer y cambiar los libros de la
-hoja, nada más de tu cuenta de Google.
+Al entrar, los libros del móvil se **combinan** con los de la hoja: no se pierde nada.
+Si el móvil tenía libros sin perfil (de antes o de usarla sin conectar), pregunta si se
+pasan al perfil que entra.
+
+Si `URL_SCRIPT` se deja vacía, la URL se pega en Ajustes.
+
+### Pasar la hoja de antes de los perfiles
+
+Renombrar las pestañas `LIBROS` → `LIBROS_david` y `SAGAS` → `SAGAS_david` (con el id
+del perfil de quien sean). Y crear la **implementación nueva**: la antigua sigue
+sirviendo el código de antes.
 
 Opcional: propiedad del script `GOOGLE_BOOKS_KEY` con una clave de Google Books
 (gratis). Sin ella, la búsqueda usa solo Open Library, que suele bastar.

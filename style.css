@@ -404,6 +404,7 @@ details > label { margin-bottom: 8px; }
 .tarjeta { background: var(--tarjeta); border-radius: var(--r); padding: 14px; box-shadow: var(--sombra); display: flex; flex-direction: column; gap: 12px; }
 .estado-sync { display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 0; }
 .fila-botones { display: flex; gap: 8px; }
+#bloqueConectado { display: flex; flex-direction: column; gap: 10px; }
 .fila-botones > * { flex: 1; }
 label.btn { flex-direction: row; text-transform: none; letter-spacing: .01em; font-size: 13px; color: var(--tinta); }
 .creditos { font-size: 11px; color: var(--texto-3); text-align: center; margin-top: 12px; }

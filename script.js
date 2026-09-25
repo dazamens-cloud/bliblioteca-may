@@ -5,14 +5,15 @@
 // La detección de sagas está en sagas.js.
 // =============================================
 
-// Conexión con la hoja, como en Control-cocina: en el código, así cualquier
-// dispositivo que abra la app se conecta solo. Vacías = se configura en Ajustes.
+// URL de la Web App, como en Control-cocina: en el código, así cualquier
+// dispositivo la tiene sin configurar nada. Cada persona entra en su perfil
+// con su PIN (los PIN están en el servidor, no aquí). Vacía = se pega en Ajustes.
 // ⚠️ Cada implementación nueva de Apps Script da otra URL: cambiarla aquí.
-const URL_SCRIPT    = '';
-const WEB_APP_TOKEN = '';
-const configEnCodigo = () => !!(URL_SCRIPT && WEB_APP_TOKEN);
+const URL_SCRIPT = '';
 
-const LS = { libros: 'mb_libros', sagas: 'mb_sagas', cola: 'mb_cola', config: 'mb_config', filtro: 'mb_filtro' };
+const LS = { config: 'mb_config', filtro: 'mb_filtro' };
+// Libros, sagas y cola van por perfil: mb_ana_libros. Sin perfil: mb_libros.
+const lsDatos = (k, perfil = config.perfil) => 'mb_' + (perfil ? perfil + '_' : '') + k;
 
 const ESTADOS = { pendiente: 'Por leer', leyendo: 'Leyendo', leido: 'Leído', abandonado: 'Pausado' };
 
@@ -36,7 +37,7 @@ const LIBRO_VACIO = {
 let libros = [];
 let sagas  = [];
 let cola   = [];          // cambios pendientes de enviar a la hoja
-let config = {};          // { url, token } de la Web App de Apps Script
+let config = {};          // { url, perfil, clave } de la Web App de Apps Script
 let filtro = 'todos';
 let enviando = false;
 let modalAbierto = false;
@@ -96,22 +97,33 @@ function normalizarSaga(o) {
 }
 
 function cargarLocal() {
-  libros = leerLS(LS.libros, []).map(normalizarLibro);
-  sagas  = leerLS(LS.sagas, []).map(normalizarSaga);
-  cola   = leerLS(LS.cola, []);
-  config = configInicial();
+  config = configGuardada();
   filtro = leerLS(LS.filtro, 'todos');
   if (!FILTROS[filtro]) filtro = 'todos';
+  cargarDatos();
 }
 
-// La del código manda; si no hay, la que se guardó desde Ajustes
-function configInicial() {
-  return configEnCodigo() ? { url: URL_SCRIPT, token: WEB_APP_TOKEN } : leerLS(LS.config, {});
+// Los datos del perfil activo (o los de "sin perfil")
+function cargarDatos() {
+  libros = leerLS(lsDatos('libros'), []).map(normalizarLibro);
+  sagas  = leerLS(lsDatos('sagas'), []).map(normalizarSaga);
+  cola   = leerLS(lsDatos('cola'), []);
+}
+
+// La URL del código manda sobre la guardada. Las conexiones de antes de los
+// perfiles ({ url, token }) se quedan solo con la URL.
+function configGuardada() {
+  const c = leerLS(LS.config, {});
+  return { url: URL_SCRIPT || c.url || '', perfil: c.perfil || '', clave: c.clave || '' };
+}
+
+function guardarConfig() {
+  guardarLS(LS.config, { url: config.url, perfil: config.perfil, clave: config.clave });
 }
 
 function guardarLocal() {
-  guardarLS(LS.libros, libros);
-  guardarLS(LS.sagas, sagas);
+  guardarLS(lsDatos('libros'), libros);
+  guardarLS(lsDatos('sagas'), sagas);
 }
 
 function guardarLibro(l) {
@@ -153,27 +165,30 @@ const sagaDe     = l => l && l.saga_id ? sagaPorId(l.saga_id) : null;
 
 // ── SINCRONIZACIÓN CON GOOGLE SHEETS ────────
 
-const conectado = () => !!(config.url && config.token);
+const conectado = () => !!(config.url && config.perfil && config.clave);
+const nombrePerfil = id => id ? id[0].toUpperCase() + id.slice(1) : '';
 
 async function apiGet(params) {
-  const url = config.url + '?' + new URLSearchParams({ ...params, token: config.token });
-  const r = await fetchT(url, {}, 20000);
-  return r.json();
+  const q = new URLSearchParams({ ...params, perfil: config.perfil, clave: config.clave });
+  const r = await (await fetchT(config.url + '?' + q, {}, 20000)).json();
+  if (r && r.error === 'clave') sesionCaducada();
+  return r;
 }
 
 // Content-Type text/plain (el de por defecto): evita la petición CORS previa,
 // que Apps Script no sabe contestar.
 async function apiPost(payload) {
-  const r = await fetchT(config.url, {
-    method: 'POST', body: JSON.stringify({ ...payload, token: config.token })
-  }, 30000);
-  return r.json();
+  const r = await (await fetchT(config.url, {
+    method: 'POST', body: JSON.stringify({ ...payload, perfil: config.perfil, clave: config.clave })
+  }, 30000)).json();
+  if (r && r.error === 'clave') sesionCaducada();
+  return r;
 }
 
 function encolar(payload) {
   if (!conectado()) return;
   cola.push(payload);
-  guardarLS(LS.cola, cola);
+  guardarLS(lsDatos('cola'), cola);
   vaciarCola();
 }
 
@@ -186,7 +201,7 @@ async function vaciarCola() {
       const r = await apiPost(cola[0]);
       if (!r || !r.ok) throw new Error((r && r.error) || 'sin respuesta');
       cola.shift();
-      guardarLS(LS.cola, cola);
+      guardarLS(lsDatos('cola'), cola);
     }
     config.error = '';
   } catch (e) {
@@ -201,9 +216,6 @@ async function vaciarCola() {
 // Trae la hoja y reemplaza lo local. Solo si no quedan cambios sin enviar.
 async function descargar() {
   if (!conectado() || !navigator.onLine) return;
-  // Primera vez con esta URL en este dispositivo (o URL nueva en el código):
-  // combinar en vez de reemplazar, para no perder libros que solo estén aquí
-  if (leerLS(LS.config, {}).url !== config.url) return conectarHoja(config.url, config.token);
   await vaciarCola();
   if (cola.length) return;
   try {
@@ -231,37 +243,103 @@ function combinar(a, b) {
   return [...m.values()];
 }
 
-async function conectarHoja(url, token) {
-  config = { url: url.trim(), token: token.trim() };
-  toast('Conectando con la hoja…', { ms: 0 });
+// ── PERFILES ────────────────────────────────
+
+async function cargarPerfiles() {
+  const sel = $('#cfgPerfil');
+  const url = config.url || $('#cfgUrl').value.trim();
+  if (!url || conectado()) return;
+  sel.innerHTML = '<option value="">Cargando…</option>';
   try {
-    const r = await apiGet({ accion: 'todo' });
-    if (!r.ok) throw new Error(r.error === 'token' ? 'el token no es correcto' : r.error);
-    // Al conectar se combina: no se pierde nada ni del móvil ni de la hoja
-    libros = combinar(r.libros.map(normalizarLibro), libros);
-    sagas  = combinar(r.sagas.map(normalizarSaga), sagas);
-    guardarLocal();
-    guardarLS(LS.config, config);
-    cola = [{ accion: 'subirTodo', libros, sagas }];
-    guardarLS(LS.cola, cola);
-    await vaciarCola();
-    toast('✅ Conectado. ' + libros.length + ' libros sincronizados.');
-    renderTodo();
+    const r = await (await fetchT(url + '?accion=perfiles', {}, 20000)).json();
+    if (!r.ok) throw new Error(r.error);
+    sel.innerHTML = r.perfiles.length
+      ? '<option value="">Elige tu perfil</option>' +
+        r.perfiles.map(p => `<option value="${esc(p)}">${esc(nombrePerfil(p))}</option>`).join('')
+      : '<option value="">No hay perfiles: créalos en Apps Script</option>';
   } catch (e) {
-    config = configInicial();
-    toast('❌ No se pudo conectar: ' + esc(e.message), { ms: 6000 });
+    sel.innerHTML = '<option value="">No se pudieron cargar los perfiles</option>';
   }
+}
+
+const ERRORES_ENTRAR = {
+  pin: 'PIN incorrecto', perfil: 'ese perfil no existe',
+  bloqueado: 'demasiados intentos, espera 15 minutos'
+};
+
+async function entrarPerfil(perfil, pin) {
+  const url = config.url || $('#cfgUrl').value.trim();
+  if (!url || !perfil || !pin) { toast('Elige un perfil y escribe el PIN'); return; }
+  toast('Entrando…', { ms: 0 });
+  try {
+    const q = new URLSearchParams({ accion: 'entrar', perfil, pin });
+    const r = await (await fetchT(url + '?' + q, {}, 20000)).json();
+    if (!r.ok) throw new Error(ERRORES_ENTRAR[r.error] || r.error);
+
+    const sinPerfil = { libros, sagas };
+    config = { url, perfil, clave: r.clave };
+    cargarDatos();
+    // Libros de antes de los perfiles (o de usar la app sin conectar):
+    // se ofrecen al perfil que entra, y solo se pasan si se acepta
+    const heredar = sinPerfil.libros.length > 0 &&
+      confirm('Este móvil tiene ' + sinPerfil.libros.length + ' libros sin perfil. ¿Pasarlos a ' + nombrePerfil(perfil) + '?');
+    if (heredar) {
+      libros = combinar(libros, sinPerfil.libros);
+      sagas  = combinar(sagas, sinPerfil.sagas);
+    }
+
+    // Lo que quedó pendiente de la última vez (un libro borrado, por ejemplo)
+    // se envía antes: si no, al combinar volvería desde la hoja
+    await vaciarCola();
+    const t = await apiGet({ accion: 'todo' });
+    if (!t.ok) throw new Error(t.error);
+    // Al entrar se combina: no se pierde nada ni del móvil ni de la hoja
+    libros = combinar(t.libros.map(normalizarLibro), libros);
+    sagas  = combinar(t.sagas.map(normalizarSaga), sagas);
+    guardarLocal();
+    guardarConfig();
+    // Ya están guardados en el perfil: ahora sí se pueden quitar de "sin perfil"
+    if (heredar) ['libros', 'sagas', 'cola'].forEach(k => localStorage.removeItem(lsDatos(k, '')));
+    cola = [{ accion: 'subirTodo', libros, sagas }];
+    guardarLS(lsDatos('cola'), cola);
+    $('#cfgPin').value = '';
+    await vaciarCola();
+    toast('✅ Hola, ' + esc(nombrePerfil(perfil)) + '. ' + libros.length + ' libros.');
+  } catch (e) {
+    config = configGuardada();
+    cargarDatos();
+    toast('❌ No se pudo entrar: ' + esc(e.message), { ms: 6000 });
+  }
+  renderTodo();
+  renderAjustes();
+}
+
+// Los libros del perfil se quedan en el móvil (y en la hoja): al volver a
+// entrar con el PIN se siguen viendo sin conexión.
+function salirPerfil() {
+  config = { url: URL_SCRIPT || config.url, perfil: '', clave: '' };
+  guardarConfig();
+  cargarDatos();
+  renderTodo();
+  renderAjustes();
+}
+
+// El PIN ha cambiado en el servidor: la clave guardada ya no vale
+function sesionCaducada() {
+  if (!conectado()) return;
+  salirPerfil();
+  toast('🔒 La sesión ha caducado. Vuelve a entrar con tu PIN.', { ms: 6000 });
 }
 
 function pintarSync() {
   const el = $('#syncEstado');
   if (!el) return;
   let icono, txt = '', titulo;
-  if (!conectado())          { icono = 'smartphone'; titulo = 'Solo en este móvil'; }
+  if (!conectado())          { icono = 'smartphone'; titulo = 'Solo en este móvil, sin perfil'; }
   else if (enviando)         { icono = 'sync'; titulo = 'Enviando…'; }
   else if (cola.length)      { icono = 'cloud_off'; txt = cola.length; titulo = cola.length + ' cambios pendientes de enviar'; }
   else if (config.error)     { icono = 'warning'; titulo = 'Error: ' + config.error; }
-  else                       { icono = 'cloud_done'; titulo = 'Sincronizado con la hoja'; }
+  else                       { icono = 'cloud_done'; titulo = nombrePerfil(config.perfil) + ': sincronizado con la hoja'; }
   el.innerHTML = `<span class="ic">${icono}</span>${txt}`;
   el.title = titulo;
   el.classList.toggle('error', !!(conectado() && config.error));
@@ -1023,12 +1101,12 @@ function abrirPreview(d, aviso) {
 // ── AJUSTES ─────────────────────────────────
 
 function renderAjustes() {
-  $('#cfgUrl').value = config.url || '';
-  $('#cfgToken').value = config.token || '';
-  $('#formConexion').hidden = configEnCodigo();
-  $('#cfgCodigo').hidden = !configEnCodigo();
-  $('#btnDesconectar').hidden = configEnCodigo();
+  if (!$('#cfgUrl').value) $('#cfgUrl').value = config.url || '';
+  $('#campoUrl').hidden = !!URL_SCRIPT;
+  $('#formPerfil').hidden = conectado();
   $('#bloqueConectado').hidden = !conectado();
+  $('#perfilActual').textContent = nombrePerfil(config.perfil);
+  if (!conectado() && !$('#cfgPerfil').value) cargarPerfiles();
   pintarSync();
 }
 
@@ -1090,13 +1168,12 @@ function engancharEventos() {
   $('#btnManual').onclick = () => abrirPreview({});
   $('#btnNuevaSaga').onclick = () => abrirEditorSaga({ nombre: '', autor: '', fuente: 'manual', libros: [{ titulo: '', num: 1, incluir: true }] });
 
-  $('#formConexion').onsubmit = e => { e.preventDefault(); conectarHoja($('#cfgUrl').value, $('#cfgToken').value); };
+  $('#formPerfil').onsubmit = e => { e.preventDefault(); entrarPerfil($('#cfgPerfil').value, $('#cfgPin').value.trim()); };
+  $('#cfgUrl').onchange = cargarPerfiles;
   $('#btnSincronizar').onclick = async () => { toast('Sincronizando…', { ms: 0 }); await descargar(); toast(config.error ? '⚠️ ' + esc(config.error) : '☁️ Al día'); };
-  $('#btnDesconectar').onclick = () => {
-    if (!confirm('¿Desconectar la hoja? Los libros se quedan en este móvil.')) return;
-    config = {}; cola = [];
-    guardarLS(LS.config, config); guardarLS(LS.cola, cola);
-    renderAjustes();
+  $('#btnSalir').onclick = () => {
+    if (cola.length && !confirm('Hay ' + cola.length + ' cambios sin enviar a la hoja. Se enviarán cuando vuelvas a entrar. ¿Salir?')) return;
+    salirPerfil();
   };
   $('#btnExportar').onclick = exportar;
   $('#inputImportar').onchange = e => { if (e.target.files[0]) importar(e.target.files[0]); e.target.value = ''; };
@@ -1156,6 +1233,8 @@ document.addEventListener('DOMContentLoaded', () => {
   engancharEventos();
   renderTodo();
   renderAjustes();
+  // Primera vez en este móvil: directo a elegir perfil
+  if (config.url && !conectado() && !libros.length) irA('screenAjustes');
   descargar();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW:', e));
 });

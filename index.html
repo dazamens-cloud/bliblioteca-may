@@ -77,24 +77,29 @@
 
     <!-- AJUSTES -->
     <section id="screenAjustes" class="screen">
-      <h2>Google Sheets</h2>
-      <p class="sub">Sin conectar, los libros se guardan solo en este móvil. Conectado, se guardan también en tu hoja y los ves desde cualquier dispositivo.</p>
+      <h2>Perfil</h2>
+      <p class="sub">Cada persona tiene su propia biblioteca y entra con su PIN. Los libros se guardan en la hoja y los ves desde cualquier dispositivo. Sin perfil, se quedan solo en este móvil.</p>
       <p class="estado-sync" id="infoSync"></p>
 
-      <p id="cfgCodigo" class="sub" hidden>La conexión va en el código de la app: este dispositivo se conecta solo.</p>
-      <form id="formConexion" class="tarjeta">
-        <label>URL de la aplicación web (acaba en /exec)
+      <form id="formPerfil" class="tarjeta">
+        <label id="campoUrl">URL de la aplicación web (acaba en /exec)
           <input id="cfgUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
         </label>
-        <label>Token
-          <input id="cfgToken" type="password" autocomplete="off">
+        <label>Perfil
+          <select id="cfgPerfil"><option value="">Elige tu perfil</option></select>
         </label>
-        <button class="btn">Guardar y conectar</button>
+        <label>PIN
+          <input id="cfgPin" type="password" inputmode="numeric" autocomplete="off">
+        </label>
+        <button class="btn">Entrar</button>
       </form>
 
-      <div id="bloqueConectado" class="fila-botones" hidden>
-        <button id="btnSincronizar" class="btn secundario"><span class="ic">sync</span>Sincronizar</button>
-        <button id="btnDesconectar" class="btn peligro">Desconectar</button>
+      <div id="bloqueConectado" hidden>
+        <p class="sub">Estás en la biblioteca de <strong id="perfilActual"></strong>.</p>
+        <div class="fila-botones">
+          <button id="btnSincronizar" class="btn secundario"><span class="ic">sync</span>Sincronizar</button>
+          <button id="btnSalir" class="btn peligro">Cambiar de perfil</button>
+        </div>
       </div>
 
       <h2>Copia de seguridad</h2>
