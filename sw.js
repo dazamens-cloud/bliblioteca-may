@@ -4,7 +4,7 @@
 // App (html, css, js): network-first con cache: 'no-cache'.
 //   Así cada carga con conexión pregunta al servidor si hay versión nueva,
 //   aunque GitHub Pages mande Cache-Control: max-age=600. Sin esto el
-//   navegador puede servir HTML nuevo con JS viejo durante 10 minutos
+//   navegador puede servir HTML nuevo con JS viejo durante 10 minutos.
 //   No hace falta subir versión a mano.
 //
 // Fuentes e iconos: cache-first (no cambian).
