@@ -3,13 +3,18 @@
 PWA para llevar tu biblioteca personal desde el móvil: escanear libros, marcar lo que
 lees y saber qué libros de cada saga te faltan.
 
-Misma arquitectura que Control-cocina:
+Arquitectura:
 
 ```
 PWA (GitHub Pages) → Google Apps Script (Web App) → Google Sheets
 ```
 
-Funciona también **sin** la hoja: los datos se guardan en el móvil (localStorage).
+Cada persona tiene su **perfil** con su propia biblioteca y entra con un **PIN**. Los
+libros se guardan en la hoja, así que se ven desde cualquier dispositivo y no se pierden
+al cambiar de móvil.
+
+Funciona también **sin** perfil: entonces los datos se quedan solo en ese navegador
+(localStorage) y se pierden si se borran sus datos o se cambia de móvil.
 
 ## Ficheros
 
@@ -27,16 +32,26 @@ Funciona también **sin** la hoja: los datos se guardan en el móvil (localStora
 Una sola hoja y un solo Apps Script para todos. Cada persona tiene su **perfil**, con
 sus propias pestañas (`LIBROS_ana`, `SAGAS_ana`), y entra con su **PIN**.
 
-1. Crear una hoja de cálculo → **Extensiones → Apps Script**.
+1. Crear el Apps Script: en [script.google.com](https://script.google.com) (suelto:
+   `setup` crea la hoja *Mi Biblioteca* y guarda su id en `SHEET_ID`) o desde una hoja
+   con **Extensiones → Apps Script**.
 2. Pegar `apps-script/Code.gs` y guardar.
-3. Ejecutar **`setup`** una vez (genera el secreto con el que se firman las sesiones).
-4. Crear los perfiles: ⚙️ **Configuración del proyecto → Propiedades del script** →
-   añadir `PIN_david` = `1234`, `PIN_ana` = `5678`… (el nombre en minúsculas, sin
-   espacios ni tildes). Las pestañas se crean solas la primera vez que alguien entra.
+3. Crear los perfiles: ⚙️ **Configuración del proyecto → Propiedades del script** →
+   añadir `PIN_ana` = `5678`, `PIN_luis` = `2468`… El nombre, en minúsculas y sin
+   espacios ni tildes, es el que sale en la app (`ana` → "Ana").
+4. Ejecutar **`setup`**. Genera el secreto con el que se firman las sesiones (`TOKEN`)
+   y en el registro debe salir `Perfiles: ana, luis`.
 5. **Implementar → Nueva implementación → Aplicación web**. Ejecutar como: yo. Acceso:
    cualquier usuario. Copiar la URL `/exec`.
-6. Pegar la URL al principio de `script.js`, en `URL_SCRIPT`, y hacer commit.
-7. En cada móvil: **Ajustes** → elegir el perfil → PIN → Entrar. Solo la primera vez.
+6. Comprobar: abrir `…/exec?accion=perfiles` en el navegador. Debe responder
+   `{"ok":true,"perfiles":["ana","luis"]}`. Si responde `"error":"token"`, esa URL es
+   de una implementación antigua.
+7. Pegar la URL al principio de `script.js`, en `URL_SCRIPT`, y hacer commit.
+8. En cada móvil: **Ajustes** → elegir el perfil → PIN → Entrar. Solo la primera vez.
+
+**No crear a mano las pestañas de un perfil.** Se crean solas, con la fila de títulos,
+la primera vez que alguien entra. Una pestaña creada a mano sin esa fila hace que se
+pierda el primer libro o saga que se guarde (la fila 1 se lee como títulos).
 
 **Añadir a alguien:** otra propiedad `PIN_nombre`. No hay que tocar el código ni
 redesplegar. **Cambiar un PIN** cierra la sesión de ese perfil en todos los móviles.
@@ -52,19 +67,21 @@ pasan al perfil que entra.
 
 Si `URL_SCRIPT` se deja vacía, la URL se pega en Ajustes.
 
-### Pasar la hoja de antes de los perfiles
-
-Renombrar las pestañas `LIBROS` → `LIBROS_david` y `SAGAS` → `SAGAS_david` (con el id
-del perfil de quien sean). Y crear la **implementación nueva**: la antigua sigue
-sirviendo el código de antes.
-
 Opcional: propiedad del script `GOOGLE_BOOKS_KEY` con una clave de Google Books
 (gratis). Sin ella, la búsqueda usa solo Open Library, que suele bastar.
+
+### Pasar la hoja de antes de los perfiles
+
+**Renombrar** (▾ → Cambiar nombre) las pestañas que ya existen, no crear otras:
+`LIBROS` → `LIBROS_ana` y `SAGAS` → `SAGAS_ana`, con el nombre del perfil de quien
+sean. Deben conservar su fila de títulos (`id`, `isbn`, `titulo`… y `id`, `nombre`,
+`autor`…). Y crear la **implementación nueva**: la antigua sigue sirviendo el código
+de antes.
 
 ## ⚠️ Al cambiar `Code.gs`
 
 **Implementar → Nueva implementación.** Redesplegar la existente no sirve el código
-nuevo (dos de dos veces en Control-cocina). La nueva implementación da otra URL, que hay
+nuevo: Google sigue sirviendo la versión anterior. La nueva implementación da otra URL, que hay
 que cambiar en `URL_SCRIPT` de `script.js`.
 
 Los campos nuevos de `CAMPOS_LIBRO` van siempre **al final**: las filas se leen por

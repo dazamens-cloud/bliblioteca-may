@@ -5,7 +5,7 @@
 // La detección de sagas está en sagas.js.
 // =============================================
 
-// URL de la Web App, como en Control-cocina: en el código, así cualquier
+// URL de la Web App: en el código, así cualquier
 // dispositivo la tiene sin configurar nada. Cada persona entra en su perfil
 // con su PIN (los PIN están en el servidor, no aquí). Vacía = se pega en Ajustes.
 // ⚠️ Cada implementación nueva de Apps Script da otra URL: cambiarla aquí.
