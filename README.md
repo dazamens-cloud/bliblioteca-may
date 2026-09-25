@@ -3,7 +3,7 @@
 PWA para llevar tu biblioteca personal desde el móvil: escanear libros, marcar lo que
 lees y saber qué libros de cada saga te faltan.
 
-Misma arquitectura que Control-cocina:
+Arquitectura:
 
 ```
 PWA (GitHub Pages) → Google Apps Script (Web App) → Google Sheets
@@ -81,7 +81,7 @@ de antes.
 ## ⚠️ Al cambiar `Code.gs`
 
 **Implementar → Nueva implementación.** Redesplegar la existente no sirve el código
-nuevo (dos de dos veces en Control-cocina). La nueva implementación da otra URL, que hay
+nuevo: Google sigue sirviendo la versión anterior. La nueva implementación da otra URL, que hay
 que cambiar en `URL_SCRIPT` de `script.js`.
 
 Los campos nuevos de `CAMPOS_LIBRO` van siempre **al final**: las filas se leen por
