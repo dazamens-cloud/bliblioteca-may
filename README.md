@@ -20,12 +20,15 @@ Funciona también **sin** perfil: entonces los datos se quedan solo en ese naveg
 
 | Fichero | Qué es |
 |---|---|
-| `index.html` | Las cuatro pantallas: Biblioteca, Sagas, Añadir, Ajustes |
-| `script.js` | Datos, sincronización, escáner e interfaz |
+| `index.html` | Las pantallas: Biblioteca, Sagas, Añadir, Actividad y Perfil/Ajustes |
+| `script.js` | Datos, sincronización, perfiles, escáner e interfaz |
 | `sagas.js` | Detección de sagas (Wikidata + Open Library) |
-| `style.css` | Diseño (paleta de Stitch, modo claro y oscuro) |
+| `actividad.js` | Cálculos de Actividad y del reto anual (funciones puras) |
+| `cielo.js` | Fondo animado de constelaciones |
+| `style.css` | Diseño: temas noche y pergamino |
 | `sw.js` | Service worker: funciona sin conexión |
 | `apps-script/Code.gs` | Backend. Se pega en el editor de Apps Script |
+| `tests/` | Pruebas: `node --test tests/*.test.js` |
 
 ## Poner en marcha la hoja
 
@@ -67,6 +70,9 @@ pasan al perfil que entra.
 
 Si `URL_SCRIPT` se deja vacía, la URL se pega en Ajustes.
 
+**Reto anual:** cada perfil elige su meta de libros del año en Actividad. Se guarda en
+la propiedad del script `RETO_{perfil}`; no hay que crearla a mano.
+
 Opcional: propiedad del script `GOOGLE_BOOKS_KEY` con una clave de Google Books
 (gratis). Sin ella, la búsqueda usa solo Open Library, que suele bastar.
 
@@ -100,6 +106,16 @@ posición.
 
 Gotcha: Wikidata guarda muchos nombres propios solo con el idioma **`mul`** (la serie
 "Harry Potter", "J. K. Rowling"), así que hay que pedir `languages=es|mul|en`.
+
+## Aspecto
+
+Dos temas: **noche** (por defecto) y **pergamino**, más **Automático** según el modo
+oscuro del móvil (Perfil y ajustes → Aspecto). Los colores son variables en `:root` de
+`style.css`; el pergamino las redefine en `:root[data-tema="pergamino"]`.
+
+El fondo de constelaciones (`cielo.js`) es un canvas fijo del tamaño de la pantalla:
+cuesta lo mismo con 10 libros que con 500. Se para con una ficha abierta y con
+«reducir movimiento».
 
 ## Probar en local
 
