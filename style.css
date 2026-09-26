@@ -258,6 +258,31 @@ form.buscar input { flex: 1; }
 .chips button .ic { font-size: 16px; }
 .chips button.active { background: var(--acento); color: var(--sobre-acento); box-shadow: var(--brillo); }
 
+/* Dentro de "Valorados": solo estrellas */
+.filtro-estrellas button { font-size: 13px; }
+.filtro-estrellas .estrellitas { letter-spacing: .1em; }
+.filtro-estrellas button.active .estrellitas { color: var(--sobre-acento); }
+
+/* ── En pausa ─────────────────────────────── */
+.pausada {
+  display: flex; gap: 12px; align-items: center; padding: 11px 12px; border-radius: var(--r);
+  background: var(--sup); box-shadow: inset 0 0 0 1px var(--borde-suave);
+  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+}
+.apagado { filter: grayscale(.7); opacity: .7; }
+.pausada .portada { width: 46px; }
+.pausada .cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.pausada .cuerpo > div { display: flex; flex-direction: column; gap: 3px; cursor: pointer; }
+.pausada .reanudar { align-self: flex-end; }
+.pausada h3 { font-size: 17px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.pausada .autor { font-size: 12px; color: var(--tx-2); }
+.pausada .pags { display: flex; justify-content: space-between; font-size: 11px; color: var(--tx-2); font-variant-numeric: tabular-nums; }
+.pausada .barra > div, .bloque.pausado .barra > div { background: var(--tx-3); }
+.btn.reanudar { flex-shrink: 0; min-height: 36px; padding: 6px 12px; border-radius: 99px; font-size: 12px; }
+.bloque.pausado .cab-bloque .ic { color: var(--tx-3); }
+.bloque.pausado .barra, .bloque.pausado .progreso-lectura .fila { filter: grayscale(.7); opacity: .7; }
+.progreso-lectura .btn.reanudar { width: 100%; min-height: 40px; font-size: 13px; }
+
 /* ── Lista de libros ──────────────────────── */
 .lista { display: flex; flex-direction: column; gap: 8px; }
 .libro {
@@ -429,9 +454,8 @@ form.buscar input { flex: 1; }
 .pasos input { flex: 1.2; min-height: 36px; padding: 6px 10px; text-align: center; }
 
 .estrellas { display: flex; gap: 2px; }
-.estrellas button { font-size: 28px; line-height: 1; color: var(--barra); padding: 2px; }
-.estrellas button.on { color: var(--acento); }
-.estrellas button .ic { font-size: 28px; }
+.estrellas button { font-size: 30px; line-height: 1; color: var(--barra); padding: 2px 3px; }
+.estrellas button.on { color: var(--acento); text-shadow: var(--brillo); }
 
 .caja-saga { cursor: pointer; }
 .caja-saga h3 { font-size: 20px; }

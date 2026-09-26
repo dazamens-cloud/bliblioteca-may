@@ -23,7 +23,8 @@ const FILTROS = {
   pendiente: l => l.tengo && l.lectura === 'pendiente',
   leido:     l => l.lectura === 'leido',
   deseado:   l => !l.tengo,
-  prestado:  l => !!l.prestado_a
+  prestado:  l => !!l.prestado_a,
+  valorados: l => l.valoracion > 0
 };
 
 const LIBRO_VACIO = {
@@ -40,6 +41,7 @@ let cola   = [];          // cambios pendientes de enviar a la hoja
 let reto   = {};          // meta del reto por año: { "2026": 20 }
 let config = {};          // { url, perfil, clave } de la Web App de Apps Script
 let filtro = 'todos';
+let filtroEstrellas = 0;  // dentro de "Valorados": 0 = todos los puntuados, 1-5 = solo esos
 let enviando = false;
 let modalAbierto = false;
 let escaner = null;       // { stream, timer }
@@ -643,18 +645,43 @@ function tarjetaLeyendo(l) {
   </div>`;
 }
 
+// Un libro en pausa: apagado, con lo que llevabas y un botón para volver a él
+function tarjetaPausada(l) {
+  const pct = porcentaje(l);
+  return `<div class="pausada">
+    <div class="apagado" data-libro="${esc(l.id)}">${portadaHTML(l)}</div>
+    <div class="cuerpo">
+      <div class="apagado" data-libro="${esc(l.id)}">
+        <h3>${esc(l.titulo)}</h3>
+        <div class="autor">${esc(l.autor)}</div>
+        ${l.paginas ? `<div class="pags"><span>Pág. ${esc(l.pagina || 0)} de ${esc(l.paginas)}</span><span>${pct}%</span></div>
+        <div class="barra"><div style="width:${pct}%"></div></div>` : ''}
+      </div>
+      <button class="btn secundario reanudar" data-reanudar="${esc(l.id)}">${ic('play_arrow')}Reanudar</button>
+    </div>
+  </div>`;
+}
+
 function renderBiblioteca() {
   const q = norm($('#buscador').value);
   const orden = { leyendo: 0, pendiente: 1, leido: 2, abandonado: 3 };
   const lista = libros
     .filter(FILTROS[filtro])
+    .filter(l => filtro !== 'valorados' || !filtroEstrellas || l.valoracion === filtroEstrellas)
     .filter(l => !q || norm([l.titulo, l.autor, l.ubicacion, (sagaDe(l) || {}).nombre].join(' ')).includes(q))
-    .sort((a, b) => (orden[a.lectura] - orden[b.lectura]) || String(b.actualizado).localeCompare(String(a.actualizado)));
+    .sort((a, b) => (filtro === 'valorados' ? b.valoracion - a.valoracion : orden[a.lectura] - orden[b.lectura]) ||
+                    String(b.actualizado).localeCompare(String(a.actualizado)));
 
   // Chips con contador
-  const nombres = { todos: 'Todos', leyendo: 'Leyendo', pendiente: 'Por leer', leido: 'Leídos', deseado: 'Deseos', prestado: 'Prestados' };
+  const nombres = { todos: 'Todos', leyendo: 'Leyendo', pendiente: 'Por leer', leido: 'Leídos', deseado: 'Deseos', prestado: 'Prestados', valorados: '★ Valorados' };
   $('#chips').innerHTML = Object.keys(FILTROS).map(k =>
     `<button data-filtro="${k}" class="${k === filtro ? 'active' : ''}">${nombres[k]}<span class="n">${libros.filter(FILTROS[k]).length}</span></button>`).join('');
+
+  // Dentro de "Valorados": una fila solo con estrellas para quedarse con una puntuación
+  $('#chipsEstrellas').hidden = filtro !== 'valorados';
+  $('#chipsEstrellas').innerHTML = filtro !== 'valorados' ? '' : [5, 4, 3, 2, 1].map(n =>
+    `<button data-estrellas="${n}" class="${n === filtroEstrellas ? 'active' : ''}" aria-label="${n === 1 ? '1 estrella' : n + ' estrellas'}" aria-pressed="${n === filtroEstrellas}">
+      <span class="estrellitas">${'★'.repeat(n)}</span><span class="n">${libros.filter(l => l.valoracion === n).length}</span></button>`).join('');
 
   // Resumen: cifras, sagas con huecos y lo que estoy leyendo
   let panel = '';
@@ -686,6 +713,12 @@ function renderBiblioteca() {
     if (leyendo.length && filtro === 'todos' && !q) {
       panel += `<div class="titulo-seccion"><h2>Leyendo ahora</h2>${leyendo.length > 1 ? `<span>${leyendo.length} libros</span>` : ''}</div>`;
       panel += leyendo.map(tarjetaLeyendo).join('');
+    }
+
+    const pausados = libros.filter(l => l.lectura === 'abandonado');
+    if (pausados.length && filtro === 'todos' && !q) {
+      panel += `<div class="titulo-seccion"><h2>En pausa</h2><span>${pausados.length === 1 ? '1 libro' : pausados.length + ' libros'}</span></div>`;
+      panel += pausados.map(tarjetaPausada).join('');
     }
   }
   $('#panelResumen').innerHTML = panel;
@@ -758,18 +791,21 @@ function abrirDetalle(id) {
     bloqueSaga = `<button class="btn secundario" data-buscar-saga="${esc(l.id)}">${ic('travel_explore')}¿Es parte de una saga?</button>`;
   }
 
-  const bloqueProgreso = l.lectura === 'leyendo' ? `
-    <div class="bloque">
-      <div class="cab-bloque"><span>${ic('menu_book')}Progreso</span><span>${pct ? pct + '%' : ''}</span></div>
+  // En pausa se sigue viendo por dónde ibas, apagado y con «Reanudar» en vez de los botones de páginas
+  const pausado = l.lectura === 'abandonado';
+  const bloqueProgreso = l.lectura === 'leyendo' || pausado ? `
+    <div class="bloque${pausado ? ' pausado' : ''}">
+      <div class="cab-bloque"><span>${ic(pausado ? 'pause' : 'menu_book')}${pausado ? 'En pausa' : 'Progreso'}</span><span>${pct ? pct + '%' : ''}</span></div>
       ${l.paginas ? `<div class="barra"><div style="width:${pct}%"></div></div>` : ''}
       <div class="progreso-lectura">
         <div class="fila"><span>Página <strong>${esc(l.pagina || 0)}</strong>${l.paginas ? ' de ' + esc(l.paginas) : ''}</span>
         ${l.paginas && l.pagina ? `<span>Faltan ${Math.max(0, l.paginas - l.pagina)} págs.</span>` : ''}</div>
+        ${pausado ? `<button class="btn reanudar" data-reanudar="${esc(l.id)}">${ic('play_arrow')}Reanudar</button>` : `
         <div class="pasos">
           <button data-sumar-paginas="${esc(l.id)}" data-n="10">+10</button>
           <button data-sumar-paginas="${esc(l.id)}" data-n="25">+25</button>
           <input type="number" inputmode="numeric" data-campo="pagina" value="${esc(l.pagina)}" placeholder="Página" aria-label="Página actual">
-        </div>
+        </div>`}
       </div>
     </div>` : '';
 
@@ -782,7 +818,7 @@ function abrirDetalle(id) {
           <p class="autor">${esc(l.autor)}</p>
           <p class="meta">${[l.editorial, l.anio, l.paginas ? l.paginas + ' págs.' : ''].filter(Boolean).map(esc).join(' · ')}</p>
           <div class="estrellas" data-campo="valoracion">
-            ${[1, 2, 3, 4, 5].map(n => `<button data-valor="${n}" class="${l.valoracion >= n ? 'on' : ''}" aria-label="${n} estrellas">${ic('star', true)}</button>`).join('')}
+            ${[1, 2, 3, 4, 5].map(n => `<button data-valor="${n}" class="${l.valoracion >= n ? 'on' : ''}" aria-label="${n} estrellas">★</button>`).join('')}
           </div>
         </div>
       </div>
@@ -1459,7 +1495,15 @@ function engancharEventos() {
     const b = e.target.closest('button');
     if (!b) return;
     filtro = b.dataset.filtro;
+    filtroEstrellas = 0;
     guardarLS(LS.filtro, filtro);
+    renderBiblioteca();
+  };
+  $('#chipsEstrellas').onclick = e => {
+    const b = e.target.closest('[data-estrellas]');
+    if (!b) return;
+    const n = Number(b.dataset.estrellas);
+    filtroEstrellas = filtroEstrellas === n ? 0 : n;   // tocar la misma otra vez: todos los valorados
     renderBiblioteca();
   };
   $('#chipsSagas').onclick = e => {
@@ -1510,7 +1554,7 @@ function engancharEventos() {
 
   // Delegación: todo lo que se pinta dinámicamente
   document.addEventListener('click', e => {
-    const t = e.target.closest('[data-libro],[data-resultado],[data-cerrar],[data-ir],[data-manual],[data-abrir-saga],[data-buscar-saga],[data-borrar-libro],[data-borrar-saga],[data-editar-saga],[data-crear-de-saga],[data-sumar-paginas],[data-terminar],[data-poner-ubicacion],[data-nueva-saga],[data-quiero-tomo],.segmentado[data-campo] button,.estrellas button');
+    const t = e.target.closest('[data-libro],[data-resultado],[data-cerrar],[data-ir],[data-manual],[data-abrir-saga],[data-buscar-saga],[data-borrar-libro],[data-borrar-saga],[data-editar-saga],[data-crear-de-saga],[data-sumar-paginas],[data-terminar],[data-poner-ubicacion],[data-nueva-saga],[data-quiero-tomo],[data-reanudar],.segmentado[data-campo] button,.estrellas button');
     if (!t) return;
     const ds = t.dataset;
 
@@ -1529,6 +1573,7 @@ function engancharEventos() {
     else if (ds.sumarPaginas)            { sumarPaginas(ds.sumarPaginas, Number(ds.n)); }
     else if (ds.terminar)                { cambiarCampo(ds.terminar, 'lectura', 'leido'); }
     else if (ds.nuevaSaga !== undefined) { abrirEditorSaga({ nombre: '', autor: '', fuente: 'manual', libros: [{ titulo: '', num: 1, incluir: true }] }); }
+    else if (ds.reanudar)                { cambiarCampo(ds.reanudar, 'lectura', 'leyendo'); }
     else if (ds.quieroTomo)              { crearDesdeSaga(ds.quieroTomo, Number(ds.indice), false, false); }
     else if (ds.ponerUbicacion !== undefined) {
       const id = t.closest('.detalle').dataset.id;
