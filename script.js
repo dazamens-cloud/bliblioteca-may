@@ -353,6 +353,19 @@ const OL = 'https://openlibrary.org';
 
 function limpiarIsbn(s) { return String(s || '').replace(/[^0-9Xx]/g, '').toUpperCase(); }
 
+// Comprueba la cifra de control: pilla casi cualquier error al teclearlo a mano
+function isbnValido(isbn) {
+  if (/^\d{13}$/.test(isbn)) {
+    const suma = [...isbn].reduce((t, c, i) => t + Number(c) * (i % 2 ? 3 : 1), 0);
+    return suma % 10 === 0;
+  }
+  if (/^\d{9}[\dX]$/.test(isbn)) {
+    const suma = [...isbn].reduce((t, c, i) => t + (c === 'X' ? 10 : Number(c)) * (10 - i), 0);
+    return suma % 11 === 0;
+  }
+  return false;
+}
+
 // Preferir ediciones españolas (978-84) si una obra tiene varias
 function elegirIsbn(lista) {
   const l = (lista || []).filter(i => i.length === 13);
@@ -749,7 +762,7 @@ function abrirDetalle(id) {
         <label>Nº en la saga <input data-campo="saga_num" type="number" min="0" step="0.5" value="${esc(l.saga_num)}"></label>
         <label>Páginas <input data-campo="paginas" type="number" value="${esc(l.paginas)}"></label>
         <label>Portada (URL) <input data-campo="portada" value="${esc(l.portada)}"></label>
-        <p class="meta">${l.isbn ? 'ISBN ' + esc(l.isbn) : ''}</p>
+        <label>ISBN <input data-campo="isbn" inputmode="numeric" autocomplete="off" value="${esc(l.isbn)}"></label>
       </details>
 
       <div class="acciones">
@@ -766,6 +779,14 @@ function cambiarCampo(id, campo, valor) {
   if (campo === 'tengo') valor = valor === 'true';
   if (campo === 'valoracion') valor = l.valoracion === Number(valor) ? 0 : Number(valor);
   if (['saga_num', 'pagina', 'paginas'].includes(campo)) valor = valor === '' ? '' : Number(valor);
+  if (campo === 'isbn') {
+    valor = limpiarIsbn(valor);
+    if (valor && !isbnValido(valor)) {
+      toast('Ese ISBN no parece válido: revisa los números');
+      if (modalAbierto) abrirDetalle(id);   // vuelve a poner el que había
+      return;
+    }
+  }
   l[campo] = valor;
   if (campo === 'lectura' && valor === 'leido') {
     if (!l.fin) l.fin = ahora().slice(0, 10);
@@ -1052,7 +1073,8 @@ function abrirPreview(d, aviso) {
           <label>Autor <input id="pvAutor" value="${esc(d.autor)}"></label>
         </div>
       </div>
-      <p class="meta">${[d.editorial, d.anio, d.paginas ? d.paginas + ' págs.' : '', d.isbn ? 'ISBN ' + d.isbn : ''].filter(Boolean).map(esc).join(' · ')}</p>
+      <p class="meta">${[d.editorial, d.anio, d.paginas ? d.paginas + ' págs.' : ''].filter(Boolean).map(esc).join(' · ')}</p>
+      <label>ISBN <input id="pvIsbn" inputmode="numeric" autocomplete="off" value="${esc(d.isbn)}" placeholder="Opcional"></label>
       <div class="segmentado" id="pvTengo">
         <button data-valor="true" class="active">${ic('menu_book')}Lo tengo</button>
         <button data-valor="false">${ic('favorite')}Lo quiero</button>
@@ -1081,9 +1103,11 @@ function abrirPreview(d, aviso) {
   $('#pvAnadir').onclick = () => {
     const titulo = $('#pvTitulo').value.trim();
     if (!titulo) { toast('Falta el título'); return; }
+    const isbn = limpiarIsbn($('#pvIsbn').value);
+    if (isbn && !isbnValido(isbn)) { toast('Ese ISBN no parece válido: revisa los números'); return; }
     const lectura = $('#pvLectura .active').dataset.valor;
     const l = normalizarLibro({
-      ...d, id: uid(), titulo, autor: $('#pvAutor').value.trim(),
+      ...d, id: uid(), isbn, titulo, autor: $('#pvAutor').value.trim(),
       tengo: $('#pvTengo .active').dataset.valor === 'true', lectura,
       ubicacion: $('#pvUbicacion').value.trim(),
       alta: ahora(), fin: lectura === 'leido' ? ahora().slice(0, 10) : ''
