@@ -142,6 +142,20 @@ function borrarLibro(id) {
   renderTodo();
 }
 
+// Si era el último libro vinculado a su saga, pregunta si borrarla también.
+// Se puede querer conservar (como lista de lo que falta) o no (libro añadido por error).
+function borrarLibroYSaga(id) {
+  const l = libroPorId(id);
+  const s = sagaDe(l);
+  const ultimo = s && !libros.some(x => x.id !== id && x.saga_id === s.id);
+  borrarLibro(id);
+  if (ultimo && confirm('«' + l.titulo + '» era tu único libro de la saga «' + s.nombre + '».\n\n' +
+                        '¿Borrar también la saga? (Cancelar = mantenerla)')) {
+    borrarSaga(s.id);
+    toast('Libro y saga borrados');
+  }
+}
+
 function guardarSaga(s) {
   s.actualizado = ahora();
   const i = sagas.findIndex(x => x.id === s.id);
@@ -1233,7 +1247,7 @@ function engancharEventos() {
       crearDesdeSaga($('#modalHoja').dataset.saga, Number(ds.crearDeSaga), ds.tengo === 'true');
     }
     else if (ds.borrarLibro) {
-      if (confirm('¿Borrar este libro de tu biblioteca?')) { borrarLibro(ds.borrarLibro); cerrarModal(); }
+      if (confirm('¿Borrar este libro de tu biblioteca?')) { borrarLibroYSaga(ds.borrarLibro); cerrarModal(); }
     }
     else if (ds.borrarSaga) {
       if (confirm('¿Borrar la saga? Los libros se quedan, solo se desvinculan.')) { borrarSaga(ds.borrarSaga); cerrarModal(); }
