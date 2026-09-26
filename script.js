@@ -9,9 +9,9 @@
 // dispositivo la tiene sin configurar nada. Cada persona entra en su perfil
 // con su PIN (los PIN están en el servidor, no aquí). Vacía = se pega en Ajustes.
 // ⚠️ Cada implementación nueva de Apps Script da otra URL: cambiarla aquí.
-const URL_SCRIPT = 'https://script.google.com/macros/s/AKfycby61JOBvWYkB6dqv8J0dJ3BMnGL64PBj4-KSeoH0KTUturUc7Mq1jcDhe6imPg-W1R4/exec';
+const URL_SCRIPT = 'https://script.google.com/macros/s/AKfycbzwplyDPH4GUHjoK7a2QmMMwOVldoBKbclBQpu9hpTX4EpugjX1ohd9SfDMXstefNJy/exec';
 
-const LS = { config: 'mb_config', filtro: 'mb_filtro' };
+const LS = { config: 'mb_config', filtro: 'mb_filtro', tema: 'mb_tema' };
 // Libros, sagas y cola van por perfil: mb_ana_libros. Sin perfil: mb_libros.
 const lsDatos = (k, perfil = config.perfil) => 'mb_' + (perfil ? perfil + '_' : '') + k;
 
@@ -37,6 +37,7 @@ const LIBRO_VACIO = {
 let libros = [];
 let sagas  = [];
 let cola   = [];          // cambios pendientes de enviar a la hoja
+let reto   = {};          // meta del reto por año: { "2026": 20 }
 let config = {};          // { url, perfil, clave } de la Web App de Apps Script
 let filtro = 'todos';
 let enviando = false;
@@ -108,6 +109,7 @@ function cargarDatos() {
   libros = leerLS(lsDatos('libros'), []).map(normalizarLibro);
   sagas  = leerLS(lsDatos('sagas'), []).map(normalizarSaga);
   cola   = leerLS(lsDatos('cola'), []);
+  reto   = leerLS(lsDatos('reto'), {});
 }
 
 // La URL del código manda sobre la guardada. Las conexiones de antes de los
@@ -177,6 +179,13 @@ const libroPorId = id => libros.find(l => l.id === id);
 const sagaPorId  = id => sagas.find(s => s.id === id);
 const sagaDe     = l => l && l.saga_id ? sagaPorId(l.saga_id) : null;
 
+function guardarMeta(anio, meta) {
+  reto[anio] = meta;
+  guardarLS(lsDatos('reto'), reto);
+  encolar({ accion: 'guardarReto', anio: String(anio), meta });
+  renderTodo();
+}
+
 // ── SINCRONIZACIÓN CON GOOGLE SHEETS ────────
 
 const conectado = () => !!(config.url && config.perfil && config.clave);
@@ -213,6 +222,13 @@ async function vaciarCola() {
   try {
     while (cola.length) {
       const r = await apiPost(cola[0]);
+      // Un Code.gs anterior al reto responde "accion desconocida", y una meta rechazada
+      // no se arregla reintentando: se descarta ese envío para no atascar la cola
+      if (cola[0].accion === 'guardarReto' && r && !r.ok && r.error !== 'clave') {
+        cola.shift();
+        guardarLS(lsDatos('cola'), cola);
+        continue;
+      }
       if (!r || !r.ok) throw new Error((r && r.error) || 'sin respuesta');
       cola.shift();
       guardarLS(lsDatos('cola'), cola);
@@ -237,6 +253,7 @@ async function descargar() {
     if (!r.ok) throw new Error(r.error);
     libros = r.libros.map(normalizarLibro);
     sagas  = r.sagas.map(normalizarSaga);
+    if (r.reto) { reto = r.reto; guardarLS(lsDatos('reto'), reto); }
     guardarLocal();
     config.error = '';
     renderTodo();
@@ -310,6 +327,7 @@ async function entrarPerfil(perfil, pin) {
     // Al entrar se combina: no se pierde nada ni del móvil ni de la hoja
     libros = combinar(t.libros.map(normalizarLibro), libros);
     sagas  = combinar(t.sagas.map(normalizarSaga), sagas);
+    if (t.reto) { reto = { ...reto, ...t.reto }; guardarLS(lsDatos('reto'), reto); }
     guardarLocal();
     guardarConfig();
     // Ya están guardados en el perfil: ahora sí se pueden quitar de "sin perfil"
@@ -523,7 +541,10 @@ function pararEscaner() {
 
 // ── NAVEGACIÓN Y MODAL ──────────────────────
 
-const NOMBRES_SECCION = { screenBiblioteca: 'Biblioteca', screenAnadir: 'Añadir', screenSagas: 'Sagas', screenAjustes: 'Ajustes' };
+const NOMBRES_SECCION = {
+  screenBiblioteca: 'Biblioteca', screenAnadir: 'Añadir', screenSagas: 'Sagas',
+  screenActividad: 'Actividad', screenAjustes: 'Perfil y ajustes'
+};
 
 function irA(id) {
   if (id !== 'screenAnadir') pararEscaner();
@@ -537,12 +558,13 @@ function irA(id) {
 function abrirModal(html) {
   $('#modalHoja').innerHTML = html;
   $('#modal').hidden = false;
+  pausarCielo(true);
   $('#modalHoja').scrollTop = 0;
   if (!modalAbierto) { history.pushState({ modal: true }, ''); modalAbierto = true; }
 }
 function cerrarModal() { if (modalAbierto) history.back(); }
 window.addEventListener('popstate', () => {
-  if (modalAbierto) { modalAbierto = false; $('#modal').hidden = true; $('#modalHoja').innerHTML = ''; }
+  if (modalAbierto) { modalAbierto = false; $('#modal').hidden = true; $('#modalHoja').innerHTML = ''; pausarCielo(false); }
 });
 
 const ic = (nombre, relleno) => `<span class="ic${relleno ? ' relleno' : ''}">${nombre}</span>`;
@@ -557,24 +579,35 @@ function portadaHTML(l, clase) {
   </div>`;
 }
 
-function badgesLibro(l) {
-  const b = [];
-  const s = sagaDe(l);
-  if (s) b.push(`<span class="badge serie">${esc(s.nombre)}${l.saga_num !== '' ? ' #' + l.saga_num : ''}</span>`);
-  if (!l.tengo) b.push('<span class="badge deseado">Lo quiero</span>');
-  else b.push(`<span class="badge ${l.lectura}">${ESTADOS[l.lectura]}</span>`);
-  if (l.prestado_a) b.push('<span class="badge prestado">Prestado</span>');
-  return b.join('');
+// 3 → "III". Los números con decimales (2.5) o grandes se dejan como están.
+function romano(n) {
+  n = Number(n);
+  if (!Number.isInteger(n) || n < 1 || n > 39) return String(n);
+  return 'X'.repeat(Math.floor(n / 10)) + ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'][n % 10];
+}
+
+const estrellasTexto = v => '★'.repeat(v) + '☆'.repeat(5 - v);
+
+function estadoLibro(l) {
+  if (!l.tengo)     return { clase: 'deseo', texto: 'Lo quiero' };
+  if (l.prestado_a) return { clase: 'prestado', texto: 'Prestado' };
+  return { clase: l.lectura, texto: ESTADOS[l.lectura] };
 }
 
 function tarjetaLibro(l) {
+  const s = sagaDe(l);
+  const e = estadoLibro(l);
+  const saga = s ? esc(s.nombre) + (l.saga_num !== '' ? ' · ' + esc(romano(l.saga_num)) : '') : '';
   const izq = l.prestado_a ? `${ic('local_library')}A ${esc(l.prestado_a)}`
-            : l.ubicacion  ? `${ic('shelves')}${esc(l.ubicacion)}` : '';
-  const der = l.lectura === 'leyendo' && l.pagina ? `Pág. ${esc(l.pagina)}` : esc(l.anio);
+            : !l.tengo      ? 'Aún no está en casa'
+            : l.ubicacion   ? `${ic('shelves')}${esc(l.ubicacion)}` : '';
+  const der = l.valoracion ? `<span class="estrellitas" aria-label="${l.valoracion} de 5 estrellas">${estrellasTexto(l.valoracion)}</span>`
+            : l.lectura === 'leyendo' && l.pagina ? `Pág. ${esc(l.pagina)}`
+            : l.paginas ? `${esc(l.paginas)} págs.` : esc(l.anio);
   return `<article class="libro" data-libro="${esc(l.id)}">
     ${portadaHTML(l)}
     <div class="info">
-      <div class="badges">${badgesLibro(l)}</div>
+      <div class="arriba"><span class="saga-tag">${saga}</span><span class="estado e-${e.clase}">${e.texto}</span></div>
       <h3>${esc(l.titulo)}</h3>
       <p>${esc(l.autor)}</p>
       ${izq || der ? `<div class="pie"><span>${izq}</span><span>${der}</span></div>` : ''}
@@ -589,19 +622,22 @@ function porcentaje(l) {
 
 function tarjetaLeyendo(l) {
   const pct = porcentaje(l);
+  const s = sagaDe(l);
+  const ceja = s ? esc(s.nombre) + (l.saga_num !== '' ? ' · libro ' + esc(romano(l.saga_num)) : '') : 'Leyendo';
   return `<div class="leyendo-card">
     <div data-libro="${esc(l.id)}">${portadaHTML(l)}</div>
     <div class="cuerpo">
       <div data-libro="${esc(l.id)}">
-        <div class="etiqueta">${pct ? 'En progreso · ' + pct + '%' : 'Leyendo'}</div>
+        <div class="ceja">${ceja}</div>
         <h3>${esc(l.titulo)}</h3>
         <div class="autor">${esc(l.autor)}</div>
-        ${l.paginas ? `<div class="pags">${ic('menu_book')}Pág. ${esc(l.pagina || 0)} de ${esc(l.paginas)}</div>` : ''}
       </div>
-      ${l.paginas ? `<div class="barra"><div style="width:${pct}%"></div></div>` : ''}
+      ${l.paginas ? `<div class="pags"><span>Pág. ${esc(l.pagina || 0)} de ${esc(l.paginas)}</span><span>${pct}%</span></div>
+      <div class="barra"><div style="width:${pct}%"></div></div>` : ''}
       <div class="fila">
-        <button class="btn" data-sumar-paginas="${esc(l.id)}" data-n="10">+10 págs.</button>
-        <button class="btn secundario cuadrado" data-terminar="${esc(l.id)}" aria-label="Marcar como leído">${ic('done_all')}</button>
+        <button class="btn secundario" data-sumar-paginas="${esc(l.id)}" data-n="10">+10 págs.</button>
+        <button class="btn secundario" data-sumar-paginas="${esc(l.id)}" data-n="25">+25</button>
+        <button class="btn" data-terminar="${esc(l.id)}">${ic('done_all')}Terminado</button>
       </div>
     </div>
   </div>`;
@@ -620,27 +656,28 @@ function renderBiblioteca() {
   $('#chips').innerHTML = Object.keys(FILTROS).map(k =>
     `<button data-filtro="${k}" class="${k === filtro ? 'active' : ''}">${nombres[k]}<span class="n">${libros.filter(FILTROS[k]).length}</span></button>`).join('');
 
-  // Resumen: métricas, sagas con huecos y lo que estoy leyendo
+  // Resumen: cifras, sagas con huecos y lo que estoy leyendo
   let panel = '';
   if (libros.length) {
     const tengo = libros.filter(l => l.tengo).length;
     const leyendo = libros.filter(l => l.lectura === 'leyendo');
     const leidos = libros.filter(l => l.lectura === 'leido').length;
+    const esteAnio = leidosDelAnio(libros, new Date().getFullYear()).length;
     panel += `<div class="metricas">
-      <div class="metrica"><div class="et">Total</div><div class="num">${tengo}</div><div class="sub">En casa</div></div>
-      <div class="metrica activa"><div class="et">Activos</div><div class="num">${leyendo.length}</div><div class="sub">Leyendo</div></div>
-      <div class="metrica"><div class="et">Completos</div><div class="num">${leidos}</div><div class="sub">Leídos</div></div>
+      <div class="metrica"><div class="et">En casa</div><div class="num">${tengo}</div><div class="sub">${tengo === 1 ? 'libro' : 'libros'}</div></div>
+      <div class="metrica activa"><div class="et">● Leyendo</div><div class="num">${leyendo.length}</div><div class="sub">ahora</div></div>
+      <div class="metrica"><div class="et">Leídos</div><div class="num">${leidos}</div><div class="sub">${esteAnio} este año</div></div>
     </div>`;
 
     const conHuecos = sagas.map(s => ({ s, p: progresoSaga(s) })).filter(x => x.p.faltanTener > 0);
     if (conHuecos.length) {
       const total = conHuecos.reduce((n, x) => n + x.p.faltanTener, 0);
       const nombresSagas = conHuecos.map(x => x.s.nombre);
-      panel += `<button class="alerta-sagas" data-ir="screenSagas">
+      panel += `<button class="alerta-sagas" data-ir="screenSagas" data-filtro-sagas="faltan">
         <span class="cuadro">${ic('bookmark_border')}</span>
         <span class="txt">
-          <strong>${total === 1 ? 'Te falta 1 libro' : 'Te faltan ' + total + ' libros'} de tus sagas</strong>
-          <span class="detalle-alerta">${esc(nombresSagas.slice(0, 2).join(', '))}${nombresSagas.length > 2 ? ' y ' + (nombresSagas.length - 2) + ' más' : ''}</span>
+          <strong>${total === 1 ? 'Te falta 1 libro' : 'Te faltan ' + total + ' libros'}</strong>
+          <span class="detalle-alerta">Sagas a medias: ${esc(nombresSagas.slice(0, 2).join(', '))}${nombresSagas.length > 2 ? ' y ' + (nombresSagas.length - 2) + ' más' : ''}</span>
         </span>
         ${ic('arrow_forward')}
       </button>`;
@@ -648,12 +685,13 @@ function renderBiblioteca() {
 
     if (leyendo.length && filtro === 'todos' && !q) {
       panel += `<div class="titulo-seccion"><h2>Leyendo ahora</h2>${leyendo.length > 1 ? `<span>${leyendo.length} libros</span>` : ''}</div>`;
-      panel += leyendo.slice(0, 2).map(tarjetaLeyendo).join('');
-      panel += `<div class="titulo-seccion"><h2>Mi estantería</h2><span>${lista.length} de ${libros.length}</span></div>`;
+      panel += leyendo.map(tarjetaLeyendo).join('');
     }
   }
   $('#panelResumen').innerHTML = panel;
   $('#panelResumen').hidden = !panel;
+  $('#tituloEstanteria').innerHTML = libros.length ? `<h2>Mi estantería</h2><span>${lista.length} de ${libros.length}</span>` : '';
+  $('#tituloEstanteria').hidden = !libros.length;
 
   $('#listaLibros').innerHTML = lista.length ? lista.map(tarjetaLibro).join('') :
     libros.length ? '<p class="vacio">Nada por aquí con ese filtro.</p>' :
@@ -986,44 +1024,72 @@ function abrirEditorSaga(saga, libro) {
 }
 
 const FILTROS_SAGA = {
-  todas:      { nombre: 'Todas',        f: () => true },
-  faltan:     { nombre: 'Te faltan',    f: p => p.faltanTener > 0 },
-  porleer:    { nombre: 'Por terminar', f: p => p.faltanLeer > 0 },
-  terminadas: { nombre: 'Terminadas',   f: p => p.faltanLeer === 0 }
+  todas:     { nombre: 'Todas',     f: () => true },
+  faltan:    { nombre: 'Te faltan', f: p => p.faltanTener > 0 },
+  completas: { nombre: 'Completas', f: p => p.faltanTener === 0 }
 };
 let filtroSagas = 'todas';
+
+// Un tomo en la fila de la saga: su portada, o un hueco si te falta
+function tomoHTML(s, f, i) {
+  const n = f.num !== '' ? 'Tomo ' + esc(romano(f.num)) : 'Tomo';
+  const titulo = esc(tituloCorto(f.titulo, s.nombre));
+  if (!f.libro) {
+    return `<div class="tomo falta">
+      <div class="hueco" aria-hidden="true">${f.num !== '' ? esc(romano(f.num)) : '?'}</div>
+      <small>${n}</small><span>${titulo}</span>
+      <button class="quiero" data-quiero-tomo="${esc(s.id)}" data-indice="${i}" aria-label="Añadir «${esc(f.titulo)}» a Lo quiero">+ Lo quiero</button>
+    </div>`;
+  }
+  return `<div class="tomo ${f.estado}" data-libro="${esc(f.libro.id)}">
+    ${portadaHTML(f.libro, 'mini')}
+    <small>${n} · ${TEXTOS[f.estado]}</small><span>${titulo}</span>
+  </div>`;
+}
 
 function renderSagas() {
   const cont = $('#listaSagas');
   const todas = sagas.map(s => ({ s, p: progresoSaga(s) }));
+  const completas = todas.filter(x => x.p.faltanTener === 0).length;
+
+  $('#resumenSagas').innerHTML = sagas.length ? `<div class="resumen-sagas">
+      <span class="cuadro">${ic('collections_bookmark')}</span>
+      <div>
+        <strong>${sagas.length === 1 ? '1 saga en marcha' : sagas.length + ' sagas en marcha'}</strong>
+        <span>${completas} ${completas === 1 ? 'completa' : 'completas'} · ${sagas.length - completas} con tomos por reunir</span>
+      </div>
+    </div>` : '';
+
   $('#chipsSagas').innerHTML = sagas.length ? Object.entries(FILTROS_SAGA).map(([k, v]) =>
-    `<button data-filtro-saga="${k}" class="${k === filtroSagas ? 'active' : ''}">${v.nombre}<span class="n">${todas.filter(x => v.f(x.p)).length}</span></button>`).join('') : '';
+    `<button data-filtro-saga="${k}" class="${k === filtroSagas ? 'active' : ''}">${v.nombre}<span class="n">${todas.filter(x => v.f(x.p)).length}</span></button>`).join('')
+    + `<button data-nueva-saga>${ic('add')}Nueva</button>` : '';
 
   if (!sagas.length) {
     cont.innerHTML = `<div class="bienvenida">
       ${ic('collections_bookmark')}
       <h2>Aún no hay sagas</h2>
-      <p>Se crean solas cuando añades o empiezas un libro que forma parte de una. También puedes crear una a mano.</p>
+      <p>Se crean solas cuando añades un libro que forma parte de una. También puedes crear una a mano.</p>
+      <button class="btn" data-nueva-saga>${ic('add')}Crear una saga a mano</button>
     </div>`;
     return;
   }
   const lista = todas.filter(x => FILTROS_SAGA[filtroSagas].f(x.p))
-    .sort((a, b) => (a.p.faltanLeer === 0) - (b.p.faltanLeer === 0) || a.s.nombre.localeCompare(b.s.nombre));
+    .sort((a, b) => (a.p.faltanTener === 0) - (b.p.faltanTener === 0) || a.s.nombre.localeCompare(b.s.nombre));
   cont.innerHTML = lista.length ? lista.map(({ s, p }) => {
-    const faltan = p.filas.filter(f => f.estado === 'falta').map(f => f.titulo);
-    const pct = p.total ? Math.round(p.leidos / p.total * 100) : 0;
+    const pct = p.total ? Math.round(p.tienes / p.total * 100) : 0;
     return `<article class="saga" data-abrir-saga="${esc(s.id)}">
       <div class="cab">
         <div>
+          <div class="ceja">Saga · ${p.total === 1 ? '1 tomo' : p.total + ' tomos'}</div>
           <h3>${esc(s.nombre)}</h3>
           <p class="autor">${esc(s.autor)}</p>
         </div>
-        ${p.faltanLeer === 0 ? `<span class="badge leido">${ic('task_alt')}Terminada</span>` :
-          p.faltanTener ? `<span class="badge deseado">${p.faltanTener === 1 ? 'Falta 1' : 'Faltan ' + p.faltanTener}</span>` : ''}
+        ${p.faltanTener ? `<span class="etiqueta-saga falta">${p.faltanTener === 1 ? 'Falta 1' : 'Faltan ' + p.faltanTener}</span>`
+                        : `<span class="etiqueta-saga completa">${ic('task_alt')}Completa</span>`}
       </div>
-      ${barra(p)}
-      <div class="cifras"><span>Leídos ${p.leidos} de ${p.total} · ${p.tienes} en casa</span><span class="pct">${pct}%</span></div>
-      ${faltan.length ? `<div class="faltan">${ic('bookmark_border')}<span>Te falta: <b>${faltan.slice(0, 2).map(esc).join('</b> y <b>')}</b>${faltan.length > 2 ? ' y ' + (faltan.length - 2) + ' más' : ''}</span></div>` : ''}
+      <div class="barra${pct === 100 ? ' completa' : ''}"><div style="width:${pct}%"></div></div>
+      <div class="cifras"><span>${p.tienes} de ${p.total} en casa · ${p.leidos} ${p.leidos === 1 ? 'leído' : 'leídos'}</span><span class="pct">${pct}%</span></div>
+      <div class="tomos">${p.filas.map((f, i) => tomoHTML(s, f, i)).join('')}</div>
     </article>`;
   }).join('') : '<p class="vacio">Ninguna saga con ese filtro.</p>';
 }
@@ -1059,7 +1125,7 @@ function abrirSaga(id) {
   $('#modalHoja').dataset.saga = s.id;
 }
 
-function crearDesdeSaga(sagaId, indice, tengo) {
+function crearDesdeSaga(sagaId, indice, tengo, abrir = true) {
   const s = sagaPorId(sagaId);
   const f = progresoSaga(s).filas[indice];
   if (!f) return;
@@ -1069,13 +1135,19 @@ function crearDesdeSaga(sagaId, indice, tengo) {
   });
   guardarLibro(l);
   toast(tengo ? '📗 Añadido a tu biblioteca' : '♡ Añadido a tus deseos');
-  abrirSaga(sagaId);
+  if (abrir) abrirSaga(sagaId);
 }
 
 // ── AÑADIR ──────────────────────────────────
 
+let previewActual = null;   // la ficha abierta; una búsqueda de saga de otra ya cerrada se ignora
+
 function abrirPreview(d, aviso) {
   const duplicado = libros.find(l => (d.isbn && l.isbn === d.isbn) || (d.titulo && mismoTitulo(l.titulo, d.titulo) && mismoAutor(l.autor, d.autor)));
+  const sel = { estado: 'buscando', sagaId: null, num: '', propuesta: null };
+  const token = {};
+  previewActual = token;
+
   abrirModal(`
     <div class="preview">
       ${aviso ? `<p class="aviso">${esc(aviso)}</p>` : ''}
@@ -1083,28 +1155,93 @@ function abrirPreview(d, aviso) {
       <div class="cabecera">
         ${portadaHTML(d, 'grande')}
         <div class="campos">
+          <div class="ceja">${d.titulo ? 'Libro encontrado' : 'Libro nuevo'}</div>
           <label>Título <input id="pvTitulo" value="${esc(d.titulo)}"></label>
           <label>Autor <input id="pvAutor" value="${esc(d.autor)}"></label>
+          <p class="meta">${[d.editorial, d.anio, d.paginas ? d.paginas + ' págs.' : ''].filter(Boolean).map(esc).join(' · ')}</p>
+          ${isbnValido(limpiarIsbn(d.isbn)) ? `<span class="verificado">${ic('check_circle')}ISBN verificado</span>` : ''}
         </div>
       </div>
-      <p class="meta">${[d.editorial, d.anio, d.paginas ? d.paginas + ' págs.' : ''].filter(Boolean).map(esc).join(' · ')}</p>
       <label>ISBN <input id="pvIsbn" inputmode="numeric" autocomplete="off" value="${esc(d.isbn)}" placeholder="Opcional"></label>
-      <div class="segmentado" id="pvTengo">
-        <button data-valor="true" class="active">${ic('menu_book')}Lo tengo</button>
-        <button data-valor="false">${ic('favorite')}Lo quiero</button>
-      </div>
-      <div class="segmentado" id="pvLectura">
-        <button data-valor="pendiente" class="active">Por leer</button>
-        <button data-valor="leyendo">Leyendo</button>
-        <button data-valor="leido">Ya leído</button>
-      </div>
-      <label>Ubicación en casa <input id="pvUbicacion" placeholder="Ej. Salón, balda 3 (opcional)"></label>
-      <div class="chips-ubicacion" id="pvChipsUbicacion">${chipsUbicacion('', 'data-ubicacion-preview')}</div>
+
+      <section class="paso">
+        <div class="paso-t"><span>1 · Saga</span><small id="pvSagaNota"></small></div>
+        <div id="pvSaga"></div>
+      </section>
+
+      <section class="paso">
+        <div class="paso-t"><span>2 · ¿Cómo lo tienes?</span></div>
+        <div class="opciones" id="pvLectura">
+          <button data-valor="pendiente" class="active">Por leer<small>en la estantería</small></button>
+          <button data-valor="leyendo">Leyendo<small>ya empezado</small></button>
+          <button data-valor="leido">Ya leído<small>terminado</small></button>
+        </div>
+        <div class="opciones dos" id="pvTengo">
+          <button data-valor="true" class="active">${ic('menu_book')}Lo tengo<small>está en casa</small></button>
+          <button data-valor="false">${ic('favorite')}Lo quiero<small>lista de deseos</small></button>
+        </div>
+      </section>
+
+      <section class="paso">
+        <div class="paso-t"><span>3 · ¿Dónde lo guardas?</span><small>opcional</small></div>
+        <div class="chips-ubicacion" id="pvChipsUbicacion">${chipsUbicacion('', 'data-ubicacion-preview')}</div>
+        <input id="pvUbicacion" placeholder="Otra balda, por ejemplo «Salón, balda 3»" aria-label="Ubicación en casa">
+      </section>
+
       <div class="acciones">
         <button class="btn secundario" data-cerrar>Cancelar</button>
-        <button class="btn" id="pvAnadir">${ic('library_add')}Guardar</button>
+        <button class="btn" id="pvAnadir">${ic('library_add')}Guardar en mi biblioteca</button>
       </div>
     </div>`);
+
+  // Paso 1: la saga se busca al abrir la ficha, con la misma lógica que comprobarSaga
+  function pintarSaga() {
+    const s = sel.sagaId ? sagaPorId(sel.sagaId) : null;
+    let html, nota = '';
+    if (sel.estado === 'buscando') {
+      html = `<p class="cargando-saga">${ic('travel_explore')}Buscando saga…</p>`;
+      nota = 'puedes guardar sin esperar';
+    } else if (s) {
+      html = `<div class="campo-saga"><span>${esc(s.nombre)}</span><button type="button" id="pvQuitarSaga">Quitar</button></div>
+        <div class="contador"><span>Número de tomo</span><span class="botones-num">
+          <button type="button" id="pvMenos" aria-label="Tomo anterior">−</button><b>${sel.num === '' ? '–' : esc(sel.num)}</b><button type="button" id="pvMas" aria-label="Tomo siguiente">+</button>
+        </span></div>`;
+      nota = 'detectada sola';
+    } else if (sel.propuesta) {
+      const n = sel.propuesta.libros.filter(e => e.incluir !== false).length;
+      html = `<div class="campo-saga"><span>${esc(sel.propuesta.nombre)} · ${n} tomos<em>nueva</em></span><button type="button" id="pvQuitarSaga">Quitar</button></div>
+        <p class="sub">Al guardar podrás revisar la lista de tomos.</p>`;
+      nota = 'encontrada';
+    } else if (sagas.length) {
+      html = `<select id="pvElegirSaga" aria-label="Elegir una saga guardada"><option value="">Sin saga</option>${
+        [...sagas].sort((a, b) => a.nombre.localeCompare(b.nombre)).map(x => `<option value="${esc(x.id)}">${esc(x.nombre)}</option>`).join('')}</select>`;
+    } else {
+      html = '<p class="sub">Sin saga.</p>';
+    }
+    $('#pvSaga').innerHTML = html;
+    $('#pvSagaNota').textContent = nota;
+    const quitar = $('#pvQuitarSaga');
+    if (quitar) quitar.onclick = () => { Object.assign(sel, { estado: 'hecho', sagaId: null, propuesta: null, num: '' }); pintarSaga(); };
+    const menos = $('#pvMenos');
+    if (menos) menos.onclick = () => { sel.num = Math.max(1, (Number(sel.num) || 1) - 1); pintarSaga(); };
+    const mas = $('#pvMas');
+    if (mas) mas.onclick = () => { sel.num = (Number(sel.num) || 0) + 1; pintarSaga(); };
+    const elegir = $('#pvElegirSaga');
+    if (elegir) elegir.onchange = () => { if (elegir.value) { Object.assign(sel, { sagaId: elegir.value, num: '' }); pintarSaga(); } };
+  }
+
+  async function buscarSaga() {
+    if (!d.titulo) { sel.estado = 'hecho'; pintarSaga(); return; }
+    for (const s of sagas) {
+      const e = s.libros.find(e => mismoTitulo(e.titulo, d.titulo));
+      if (e) { Object.assign(sel, { estado: 'hecho', sagaId: s.id, num: e.num }); pintarSaga(); return; }
+    }
+    let propuesta = null;
+    try { propuesta = await descubrirSaga({ titulo: d.titulo, autor: d.autor || '' }); } catch (err) { console.warn(err); }
+    if (previewActual !== token || sel.estado !== 'buscando') return;
+    Object.assign(sel, { estado: 'hecho', propuesta });
+    pintarSaga();
+  }
 
   document.querySelectorAll('#pvTengo button, #pvLectura button').forEach(b => b.onclick = () => {
     b.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
@@ -1126,13 +1263,122 @@ function abrirPreview(d, aviso) {
       ubicacion: $('#pvUbicacion').value.trim(),
       alta: ahora(), fin: lectura === 'leido' ? ahora().slice(0, 10) : ''
     });
+
+    let revisar = null;
+    const s = sel.sagaId ? sagaPorId(sel.sagaId) : null;
+    if (s) { vincular(l, s, sel.num); l.saga_buscada = true; }
+    else if (sel.propuesta) { l.saga_buscada = true; revisar = sel.propuesta; }
+    else if (sel.estado === 'hecho') l.saga_buscada = true;
+    const seguiaBuscando = sel.estado === 'buscando';
+    previewActual = null;
+
     guardarLibro(l);
     cerrarModal();
     $('#resultados').innerHTML = '';
     $('#inputIsbn').value = '';
     if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
     toast('✅ «' + esc(l.titulo) + '» guardado');
-    setTimeout(() => comprobarSaga(l, false), 400);
+    // Una saga descubierta fuera siempre la revisa el usuario antes de guardarla
+    if (revisar) setTimeout(() => abrirEditorSaga(revisar, l), 400);
+    else if (l.saga_id) setTimeout(() => avisarSaga(l, false), 400);
+    else if (seguiaBuscando) setTimeout(() => comprobarSaga(l, false), 400);
+  };
+
+  pintarSaga();
+  buscarSaga();
+}
+
+// ── ACTIVIDAD ───────────────────────────────
+
+function filaReparto(nombre, n, max) {
+  return `<div class="fila-reparto"><span>${esc(nombre)}</span><b>${n}</b>
+    <div class="barra"><div style="width:${Math.round(n / max * 100)}%"></div></div></div>`;
+}
+
+function renderActividad() {
+  const hoy = new Date();
+  const anio = hoy.getFullYear();
+  const leidosTotal = libros.filter(l => l.lectura === 'leido').length;
+  const enCasa = libros.filter(l => l.tengo).length;
+  const delAnio = leidosDelAnio(libros, anio).length;
+  const meta = Number(reto[anio]) || 0;
+  const autor = autorMasLeido(libros);
+  const completas = sagas.filter(s => progresoSaga(s).faltanTener === 0).length;
+  const meses = porMes(libros, anio);
+  const maxMes = Math.max(1, ...meses);
+  const rep = reparto(libros);
+  const maxRep = Math.max(1, rep.prestados, ...rep.ubicaciones.map(u => u.n));
+  const nombre = config.perfil ? nombrePerfil(config.perfil) : 'Tu biblioteca';
+
+  let cuerpoReto;
+  if (meta) {
+    const r = ritmo(delAnio, meta, hoy);
+    cuerpoReto = `<div class="reto-cab"><h3>Mi reto de ${anio}</h3><span>${delAnio} de ${meta} libros</span></div>
+      <div class="barra${r.cumplido ? ' completa' : ''}"><div style="width:${Math.min(100, Math.round(delAnio / meta * 100))}%"></div></div>
+      <p class="sub">${esc(textoRitmo(r))}</p>`;
+  } else {
+    cuerpoReto = `<div class="reto-cab"><h3>Mi reto de ${anio}</h3></div>
+      <p class="sub">¿Cuántos libros quieres leer este año? Llevas ${delAnio}.</p>`;
+  }
+
+  $('#panelActividad').innerHTML = `
+    <div class="perfil-act">
+      <div class="avatar grande">${config.perfil ? esc(nombre[0]) : ic('person')}</div>
+      <div>
+        <h2>${esc(nombre)}</h2>
+        <p class="sub">${leidosTotal === 1 ? '1 libro leído' : leidosTotal + ' libros leídos'} · ${enCasa} en casa</p>
+      </div>
+    </div>
+
+    <section class="reto">
+      ${cuerpoReto}
+      <button class="btn-borde" id="retoBoton" aria-expanded="false">${meta ? 'Cambiar meta' : 'Elegir meta'}</button>
+      <div class="selector-meta" id="retoSelector" hidden>
+        <div class="grande">
+          <button id="retoMenos" aria-label="Un libro menos">−</button>
+          <output id="retoValor">${meta || 12}</output>
+          <button id="retoMas" aria-label="Un libro más">+</button>
+        </div>
+        <input type="range" id="retoRango" min="1" max="100" value="${meta || 12}" aria-label="Libros que quieres leer en ${anio}">
+        <div class="marcas"><span>1</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+        <button class="btn" id="retoGuardar">Guardar meta</button>
+      </div>
+    </section>
+
+    <div class="cifras-act">
+      <div class="cifra-act"><small>Páginas leídas</small><b>${paginasDelAnio(libros, anio).toLocaleString('es-ES')}</b><span>en ${anio}</span></div>
+      <div class="cifra-act"><small>Este año</small><b>${delAnio}</b><span>${delAnio === 1 ? 'libro leído' : 'libros leídos'}</span></div>
+      <div class="cifra-act"><small>Autor más leído</small><b>${autor ? esc(autor.autor) : '—'}</b><span>${autor ? (autor.n === 1 ? '1 libro' : autor.n + ' libros') : 'aún ninguno'}</span></div>
+      <div class="cifra-act"><small>Sagas completas</small><b>${completas} de ${sagas.length}</b><span>con todos los tomos</span></div>
+    </div>
+
+    <section class="bloque-act">
+      <div class="titulo-seccion"><h2>Libros por mes</h2><span>${anio}</span></div>
+      <div class="grafico" role="img" aria-label="Libros terminados cada mes de ${anio}: ${meses.join(', ')}">
+        ${meses.map((n, i) => `<div class="mes${i > hoy.getMonth() ? ' futuro' : ''}${i === hoy.getMonth() ? ' actual' : ''}">
+          <span class="n">${n || ''}</span><i style="height:${Math.round(n / maxMes * 100)}%"></i><span class="m">${MESES_CORTOS[i]}</span>
+        </div>`).join('')}
+      </div>
+    </section>
+
+    <section class="bloque-act">
+      <div class="titulo-seccion"><h2>Dónde están tus libros</h2><span>${enCasa} en casa</span></div>
+      ${rep.ubicaciones.length || rep.prestados ? `<div class="reparto">
+        ${rep.ubicaciones.map(u => filaReparto(u.nombre, u.n, maxRep)).join('')}
+        ${rep.prestados ? filaReparto('Prestados', rep.prestados, maxRep) : ''}
+      </div>` : '<p class="sub">Cuando añadas libros con su balda, aquí verás cómo se reparten.</p>'}
+    </section>`;
+
+  const boton = $('#retoBoton'), selector = $('#retoSelector'), rango = $('#retoRango'), valor = $('#retoValor');
+  const poner = v => { v = Math.min(100, Math.max(1, v)); rango.value = v; valor.textContent = v; };
+  boton.onclick = () => { selector.hidden = !selector.hidden; boton.setAttribute('aria-expanded', String(!selector.hidden)); };
+  rango.oninput = () => poner(Number(rango.value));
+  $('#retoMenos').onclick = () => poner(Number(rango.value) - 1);
+  $('#retoMas').onclick = () => poner(Number(rango.value) + 1);
+  $('#retoGuardar').onclick = () => {
+    const nueva = Number(rango.value);
+    guardarMeta(anio, nueva);
+    toast('🎯 Tu meta de ' + anio + ': ' + nueva + (nueva === 1 ? ' libro' : ' libros'));
   };
 }
 
@@ -1144,6 +1390,7 @@ function renderAjustes() {
   $('#formPerfil').hidden = conectado();
   $('#bloqueConectado').hidden = !conectado();
   $('#perfilActual').textContent = nombrePerfil(config.perfil);
+  pintarAvatar();
   if (!conectado() && !$('#cfgPerfil').value) cargarPerfiles();
   pintarSync();
 }
@@ -1173,12 +1420,36 @@ async function importar(fichero) {
   }
 }
 
+// ── TEMA Y AVATAR ───────────────────────────
+
+const COLOR_TEMA = { noche: '#120f1c', pergamino: '#efe4cc' };
+
+// 'noche' | 'pergamino' | 'auto' → el que se pinta
+function temaResuelto(t) {
+  if (t === 'auto') return matchMedia('(prefers-color-scheme: dark)').matches ? 'noche' : 'pergamino';
+  return t === 'pergamino' ? 'pergamino' : 'noche';
+}
+
+function aplicarTema(t) {
+  const real = temaResuelto(t);
+  document.documentElement.dataset.tema = real;
+  $('#metaTema').setAttribute('content', COLOR_TEMA[real]);
+  document.querySelectorAll('#selectorTema button').forEach(b => b.classList.toggle('active', b.dataset.tema === t));
+  recolorearCielo();
+}
+
+function pintarAvatar() {
+  $('#avatar').innerHTML = config.perfil ? esc(nombrePerfil(config.perfil)[0]) : ic('person');
+}
+
 // ── EVENTOS ─────────────────────────────────
 
 function renderTodo() {
   renderBiblioteca();
   renderSagas();
+  renderActividad();
   pintarSync();
+  pintarAvatar();
 }
 
 function engancharEventos() {
@@ -1192,7 +1463,7 @@ function engancharEventos() {
     renderBiblioteca();
   };
   $('#chipsSagas').onclick = e => {
-    const b = e.target.closest('button');
+    const b = e.target.closest('[data-filtro-saga]');
     if (!b) return;
     filtroSagas = b.dataset.filtroSaga;
     renderSagas();
@@ -1204,7 +1475,26 @@ function engancharEventos() {
   $('#formIsbn').onsubmit = e => { e.preventDefault(); buscarPorIsbn($('#inputIsbn').value); };
   $('#formTexto').onsubmit = e => { e.preventDefault(); buscarPorTexto($('#inputTexto').value); };
   $('#btnManual').onclick = () => abrirPreview({});
-  $('#btnNuevaSaga').onclick = () => abrirEditorSaga({ nombre: '', autor: '', fuente: 'manual', libros: [{ titulo: '', num: 1, incluir: true }] });
+  $('#pestanasAnadir').onclick = e => {
+    const b = e.target.closest('[data-pestana]');
+    if (!b) return;
+    document.querySelectorAll('#pestanasAnadir [data-pestana]').forEach(x => {
+      x.classList.toggle('active', x === b);
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+    $('#panelEscanear').hidden = b.dataset.pestana !== 'escanear';
+    $('#panelBuscar').hidden = b.dataset.pestana !== 'buscar';
+    if (b.dataset.pestana !== 'escanear') pararEscaner();
+  };
+  $('#selectorTema').onclick = e => {
+    const b = e.target.closest('[data-tema]');
+    if (!b) return;
+    guardarLS(LS.tema, b.dataset.tema);
+    aplicarTema(b.dataset.tema);
+  };
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (leerLS(LS.tema, 'noche') === 'auto') aplicarTema('auto');
+  });
 
   $('#formPerfil').onsubmit = e => { e.preventDefault(); entrarPerfil($('#cfgPerfil').value, $('#cfgPin').value.trim()); };
   $('#cfgUrl').onchange = cargarPerfiles;
@@ -1220,7 +1510,7 @@ function engancharEventos() {
 
   // Delegación: todo lo que se pinta dinámicamente
   document.addEventListener('click', e => {
-    const t = e.target.closest('[data-libro],[data-resultado],[data-cerrar],[data-ir],[data-manual],[data-abrir-saga],[data-buscar-saga],[data-borrar-libro],[data-borrar-saga],[data-editar-saga],[data-crear-de-saga],[data-sumar-paginas],[data-terminar],[data-poner-ubicacion],.segmentado[data-campo] button,.estrellas button');
+    const t = e.target.closest('[data-libro],[data-resultado],[data-cerrar],[data-ir],[data-manual],[data-abrir-saga],[data-buscar-saga],[data-borrar-libro],[data-borrar-saga],[data-editar-saga],[data-crear-de-saga],[data-sumar-paginas],[data-terminar],[data-poner-ubicacion],[data-nueva-saga],[data-quiero-tomo],.segmentado[data-campo] button,.estrellas button');
     if (!t) return;
     const ds = t.dataset;
 
@@ -1231,13 +1521,15 @@ function engancharEventos() {
     else if (ds.libro)                   { abrirDetalle(ds.libro); }
     else if (ds.resultado !== undefined) { abrirPreview($('#resultados')._datos[Number(ds.resultado)]); }
     else if (ds.cerrar !== undefined)    { cerrarModal(); }
-    else if (ds.ir)                      { irA(ds.ir); }
+    else if (ds.ir)                      { if (ds.filtroSagas) { filtroSagas = ds.filtroSagas; renderSagas(); } irA(ds.ir); }
     else if (ds.manual !== undefined)    { e.preventDefault(); abrirPreview({ titulo: $('#inputTexto').value }); }
     else if (ds.abrirSaga)               { abrirSaga(ds.abrirSaga); }
     else if (ds.buscarSaga)              { comprobarSaga(libroPorId(ds.buscarSaga), true); }
     else if (ds.editarSaga)              { abrirEditorSaga(sagaPorId(ds.editarSaga)); }
     else if (ds.sumarPaginas)            { sumarPaginas(ds.sumarPaginas, Number(ds.n)); }
     else if (ds.terminar)                { cambiarCampo(ds.terminar, 'lectura', 'leido'); }
+    else if (ds.nuevaSaga !== undefined) { abrirEditorSaga({ nombre: '', autor: '', fuente: 'manual', libros: [{ titulo: '', num: 1, incluir: true }] }); }
+    else if (ds.quieroTomo)              { crearDesdeSaga(ds.quieroTomo, Number(ds.indice), false, false); }
     else if (ds.ponerUbicacion !== undefined) {
       const id = t.closest('.detalle').dataset.id;
       const l = libroPorId(id);
@@ -1267,8 +1559,10 @@ function engancharEventos() {
 // ── ARRANQUE ────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
+  iniciarCielo($('#cielo'));
   cargarLocal();
   engancharEventos();
+  aplicarTema(leerLS(LS.tema, 'noche'));
   renderTodo();
   renderAjustes();
   // Primera vez en este móvil: directo a elegir perfil

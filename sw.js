@@ -16,7 +16,7 @@
 const CACHE_APP    = 'biblioteca-app';
 const CACHE_STATIC = 'biblioteca-static-v1';
 
-const APP_SHELL = ['./', './index.html', './style.css', './script.js', './sagas.js', './manifest.json', './icons/icon.svg'];
+const APP_SHELL = ['./', './index.html', './style.css', './cielo.js', './sagas.js', './actividad.js', './script.js', './manifest.json', './icons/icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE_APP).then(c => c.addAll(APP_SHELL)));
