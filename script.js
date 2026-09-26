@@ -37,6 +37,7 @@ const LIBRO_VACIO = {
 let libros = [];
 let sagas  = [];
 let cola   = [];          // cambios pendientes de enviar a la hoja
+let reto   = {};          // meta del reto por año: { "2026": 20 }
 let config = {};          // { url, perfil, clave } de la Web App de Apps Script
 let filtro = 'todos';
 let enviando = false;
@@ -108,6 +109,7 @@ function cargarDatos() {
   libros = leerLS(lsDatos('libros'), []).map(normalizarLibro);
   sagas  = leerLS(lsDatos('sagas'), []).map(normalizarSaga);
   cola   = leerLS(lsDatos('cola'), []);
+  reto   = leerLS(lsDatos('reto'), {});
 }
 
 // La URL del código manda sobre la guardada. Las conexiones de antes de los
@@ -177,6 +179,13 @@ const libroPorId = id => libros.find(l => l.id === id);
 const sagaPorId  = id => sagas.find(s => s.id === id);
 const sagaDe     = l => l && l.saga_id ? sagaPorId(l.saga_id) : null;
 
+function guardarMeta(anio, meta) {
+  reto[anio] = meta;
+  guardarLS(lsDatos('reto'), reto);
+  encolar({ accion: 'guardarReto', anio: String(anio), meta });
+  renderTodo();
+}
+
 // ── SINCRONIZACIÓN CON GOOGLE SHEETS ────────
 
 const conectado = () => !!(config.url && config.perfil && config.clave);
@@ -213,6 +222,13 @@ async function vaciarCola() {
   try {
     while (cola.length) {
       const r = await apiPost(cola[0]);
+      // Un Code.gs anterior al reto responde "accion desconocida", y una meta rechazada
+      // no se arregla reintentando: se descarta ese envío para no atascar la cola
+      if (cola[0].accion === 'guardarReto' && r && !r.ok && r.error !== 'clave') {
+        cola.shift();
+        guardarLS(lsDatos('cola'), cola);
+        continue;
+      }
       if (!r || !r.ok) throw new Error((r && r.error) || 'sin respuesta');
       cola.shift();
       guardarLS(lsDatos('cola'), cola);
@@ -237,6 +253,7 @@ async function descargar() {
     if (!r.ok) throw new Error(r.error);
     libros = r.libros.map(normalizarLibro);
     sagas  = r.sagas.map(normalizarSaga);
+    if (r.reto) { reto = r.reto; guardarLS(lsDatos('reto'), reto); }
     guardarLocal();
     config.error = '';
     renderTodo();
@@ -310,6 +327,7 @@ async function entrarPerfil(perfil, pin) {
     // Al entrar se combina: no se pierde nada ni del móvil ni de la hoja
     libros = combinar(t.libros.map(normalizarLibro), libros);
     sagas  = combinar(t.sagas.map(normalizarSaga), sagas);
+    if (t.reto) { reto = { ...reto, ...t.reto }; guardarLS(lsDatos('reto'), reto); }
     guardarLocal();
     guardarConfig();
     // Ya están guardados en el perfil: ahora sí se pueden quitar de "sin perfil"
