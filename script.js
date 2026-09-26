@@ -11,7 +11,7 @@
 // ⚠️ Cada implementación nueva de Apps Script da otra URL: cambiarla aquí.
 const URL_SCRIPT = 'https://script.google.com/macros/s/AKfycby61JOBvWYkB6dqv8J0dJ3BMnGL64PBj4-KSeoH0KTUturUc7Mq1jcDhe6imPg-W1R4/exec';
 
-const LS = { config: 'mb_config', filtro: 'mb_filtro' };
+const LS = { config: 'mb_config', filtro: 'mb_filtro', tema: 'mb_tema' };
 // Libros, sagas y cola van por perfil: mb_ana_libros. Sin perfil: mb_libros.
 const lsDatos = (k, perfil = config.perfil) => 'mb_' + (perfil ? perfil + '_' : '') + k;
 
@@ -541,7 +541,10 @@ function pararEscaner() {
 
 // ── NAVEGACIÓN Y MODAL ──────────────────────
 
-const NOMBRES_SECCION = { screenBiblioteca: 'Biblioteca', screenAnadir: 'Añadir', screenSagas: 'Sagas', screenAjustes: 'Ajustes' };
+const NOMBRES_SECCION = {
+  screenBiblioteca: 'Biblioteca', screenAnadir: 'Añadir', screenSagas: 'Sagas',
+  screenActividad: 'Actividad', screenAjustes: 'Perfil y ajustes'
+};
 
 function irA(id) {
   if (id !== 'screenAnadir') pararEscaner();
@@ -555,12 +558,13 @@ function irA(id) {
 function abrirModal(html) {
   $('#modalHoja').innerHTML = html;
   $('#modal').hidden = false;
+  pausarCielo(true);
   $('#modalHoja').scrollTop = 0;
   if (!modalAbierto) { history.pushState({ modal: true }, ''); modalAbierto = true; }
 }
 function cerrarModal() { if (modalAbierto) history.back(); }
 window.addEventListener('popstate', () => {
-  if (modalAbierto) { modalAbierto = false; $('#modal').hidden = true; $('#modalHoja').innerHTML = ''; }
+  if (modalAbierto) { modalAbierto = false; $('#modal').hidden = true; $('#modalHoja').innerHTML = ''; pausarCielo(false); }
 });
 
 const ic = (nombre, relleno) => `<span class="ic${relleno ? ' relleno' : ''}">${nombre}</span>`;
@@ -1077,7 +1081,7 @@ function abrirSaga(id) {
   $('#modalHoja').dataset.saga = s.id;
 }
 
-function crearDesdeSaga(sagaId, indice, tengo) {
+function crearDesdeSaga(sagaId, indice, tengo, abrir = true) {
   const s = sagaPorId(sagaId);
   const f = progresoSaga(s).filas[indice];
   if (!f) return;
@@ -1087,7 +1091,7 @@ function crearDesdeSaga(sagaId, indice, tengo) {
   });
   guardarLibro(l);
   toast(tengo ? '📗 Añadido a tu biblioteca' : '♡ Añadido a tus deseos');
-  abrirSaga(sagaId);
+  if (abrir) abrirSaga(sagaId);
 }
 
 // ── AÑADIR ──────────────────────────────────
@@ -1162,6 +1166,7 @@ function renderAjustes() {
   $('#formPerfil').hidden = conectado();
   $('#bloqueConectado').hidden = !conectado();
   $('#perfilActual').textContent = nombrePerfil(config.perfil);
+  pintarAvatar();
   if (!conectado() && !$('#cfgPerfil').value) cargarPerfiles();
   pintarSync();
 }
@@ -1191,12 +1196,35 @@ async function importar(fichero) {
   }
 }
 
+// ── TEMA Y AVATAR ───────────────────────────
+
+const COLOR_TEMA = { noche: '#120f1c', pergamino: '#efe4cc' };
+
+// 'noche' | 'pergamino' | 'auto' → el que se pinta
+function temaResuelto(t) {
+  if (t === 'auto') return matchMedia('(prefers-color-scheme: dark)').matches ? 'noche' : 'pergamino';
+  return t === 'pergamino' ? 'pergamino' : 'noche';
+}
+
+function aplicarTema(t) {
+  const real = temaResuelto(t);
+  document.documentElement.dataset.tema = real;
+  $('#metaTema').setAttribute('content', COLOR_TEMA[real]);
+  document.querySelectorAll('#selectorTema button').forEach(b => b.classList.toggle('active', b.dataset.tema === t));
+  recolorearCielo();
+}
+
+function pintarAvatar() {
+  $('#avatar').innerHTML = config.perfil ? esc(nombrePerfil(config.perfil)[0]) : ic('person');
+}
+
 // ── EVENTOS ─────────────────────────────────
 
 function renderTodo() {
   renderBiblioteca();
   renderSagas();
   pintarSync();
+  pintarAvatar();
 }
 
 function engancharEventos() {
@@ -1210,7 +1238,7 @@ function engancharEventos() {
     renderBiblioteca();
   };
   $('#chipsSagas').onclick = e => {
-    const b = e.target.closest('button');
+    const b = e.target.closest('[data-filtro-saga]');
     if (!b) return;
     filtroSagas = b.dataset.filtroSaga;
     renderSagas();
@@ -1222,7 +1250,26 @@ function engancharEventos() {
   $('#formIsbn').onsubmit = e => { e.preventDefault(); buscarPorIsbn($('#inputIsbn').value); };
   $('#formTexto').onsubmit = e => { e.preventDefault(); buscarPorTexto($('#inputTexto').value); };
   $('#btnManual').onclick = () => abrirPreview({});
-  $('#btnNuevaSaga').onclick = () => abrirEditorSaga({ nombre: '', autor: '', fuente: 'manual', libros: [{ titulo: '', num: 1, incluir: true }] });
+  $('#pestanasAnadir').onclick = e => {
+    const b = e.target.closest('[data-pestana]');
+    if (!b) return;
+    document.querySelectorAll('#pestanasAnadir [data-pestana]').forEach(x => {
+      x.classList.toggle('active', x === b);
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+    $('#panelEscanear').hidden = b.dataset.pestana !== 'escanear';
+    $('#panelBuscar').hidden = b.dataset.pestana !== 'buscar';
+    if (b.dataset.pestana !== 'escanear') pararEscaner();
+  };
+  $('#selectorTema').onclick = e => {
+    const b = e.target.closest('[data-tema]');
+    if (!b) return;
+    guardarLS(LS.tema, b.dataset.tema);
+    aplicarTema(b.dataset.tema);
+  };
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (leerLS(LS.tema, 'noche') === 'auto') aplicarTema('auto');
+  });
 
   $('#formPerfil').onsubmit = e => { e.preventDefault(); entrarPerfil($('#cfgPerfil').value, $('#cfgPin').value.trim()); };
   $('#cfgUrl').onchange = cargarPerfiles;
@@ -1238,7 +1285,7 @@ function engancharEventos() {
 
   // Delegación: todo lo que se pinta dinámicamente
   document.addEventListener('click', e => {
-    const t = e.target.closest('[data-libro],[data-resultado],[data-cerrar],[data-ir],[data-manual],[data-abrir-saga],[data-buscar-saga],[data-borrar-libro],[data-borrar-saga],[data-editar-saga],[data-crear-de-saga],[data-sumar-paginas],[data-terminar],[data-poner-ubicacion],.segmentado[data-campo] button,.estrellas button');
+    const t = e.target.closest('[data-libro],[data-resultado],[data-cerrar],[data-ir],[data-manual],[data-abrir-saga],[data-buscar-saga],[data-borrar-libro],[data-borrar-saga],[data-editar-saga],[data-crear-de-saga],[data-sumar-paginas],[data-terminar],[data-poner-ubicacion],[data-nueva-saga],[data-quiero-tomo],.segmentado[data-campo] button,.estrellas button');
     if (!t) return;
     const ds = t.dataset;
 
@@ -1249,13 +1296,15 @@ function engancharEventos() {
     else if (ds.libro)                   { abrirDetalle(ds.libro); }
     else if (ds.resultado !== undefined) { abrirPreview($('#resultados')._datos[Number(ds.resultado)]); }
     else if (ds.cerrar !== undefined)    { cerrarModal(); }
-    else if (ds.ir)                      { irA(ds.ir); }
+    else if (ds.ir)                      { if (ds.filtroSagas) { filtroSagas = ds.filtroSagas; renderSagas(); } irA(ds.ir); }
     else if (ds.manual !== undefined)    { e.preventDefault(); abrirPreview({ titulo: $('#inputTexto').value }); }
     else if (ds.abrirSaga)               { abrirSaga(ds.abrirSaga); }
     else if (ds.buscarSaga)              { comprobarSaga(libroPorId(ds.buscarSaga), true); }
     else if (ds.editarSaga)              { abrirEditorSaga(sagaPorId(ds.editarSaga)); }
     else if (ds.sumarPaginas)            { sumarPaginas(ds.sumarPaginas, Number(ds.n)); }
     else if (ds.terminar)                { cambiarCampo(ds.terminar, 'lectura', 'leido'); }
+    else if (ds.nuevaSaga !== undefined) { abrirEditorSaga({ nombre: '', autor: '', fuente: 'manual', libros: [{ titulo: '', num: 1, incluir: true }] }); }
+    else if (ds.quieroTomo)              { crearDesdeSaga(ds.quieroTomo, Number(ds.indice), false, false); }
     else if (ds.ponerUbicacion !== undefined) {
       const id = t.closest('.detalle').dataset.id;
       const l = libroPorId(id);
@@ -1285,8 +1334,10 @@ function engancharEventos() {
 // ── ARRANQUE ────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
+  iniciarCielo($('#cielo'));
   cargarLocal();
   engancharEventos();
+  aplicarTema(leerLS(LS.tema, 'noche'));
   renderTodo();
   renderAjustes();
   // Primera vez en este móvil: directo a elegir perfil
