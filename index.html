@@ -22,7 +22,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=EB+Garamond:ital,wght@0,500;0,600;1,400&family=Figtree:wght@400;500;600;700&display=swap">
   <!-- Solo los iconos que usa la app (~22 KB). Si se añade uno: mantener orden alfabético -->
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300..600,0..1,0&icon_names=add,arrow_forward,auto_stories,barcode_scanner,bookmark_border,check,check_circle,close,cloud_done,cloud_off,collections_bookmark,delete,done_all,download,edit_note,favorite,help_outline,insights,library_add,local_library,menu_book,pause,person,schedule,search,settings,shelves,smartphone,star,sync,task_alt,travel_explore,upload,warning&display=block">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300..600,0..1,0&icon_names=add,arrow_forward,auto_stories,barcode_scanner,bookmark_border,check,check_circle,close,cloud_done,cloud_off,collections_bookmark,delete,done_all,download,edit_note,favorite,help_outline,insights,library_add,local_library,menu_book,pause,person,play_arrow,schedule,search,settings,shelves,smartphone,star,sync,task_alt,travel_explore,upload,warning&display=block">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -44,6 +44,7 @@
     <section id="screenBiblioteca" class="screen active">
       <div id="panelResumen"></div>
       <div id="chips" class="chips"></div>
+      <div id="chipsEstrellas" class="chips filtro-estrellas" hidden></div>
       <div class="buscador">
         <span class="ic">search</span>
         <input id="buscador" type="search" placeholder="Buscar por título, autor, saga o balda" autocomplete="off">
