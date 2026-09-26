@@ -29,6 +29,9 @@ function mismoTitulo(a, b) {
   const x = norm(a), y = norm(b);
   if (!x || !y) return false;
   if (x === y) return true;
+  // "Ataque a los titanes 1" no es el 10, aunque uno contenga al otro
+  const nx = numeroEnTitulo(x), ny = numeroEnTitulo(y);
+  if (nx !== null && ny !== null && nx !== ny) return false;
   const corto = x.length < y.length ? x : y;
   const largo = x.length < y.length ? y : x;
   return corto.length >= 10 && largo.includes(corto);
@@ -43,9 +46,23 @@ function mismoAutor(a, b) {
 }
 
 // "La Biblia de los Caídos. Tomo 1 del testamento del Gris" → "La Biblia de los Caídos"
+// "Ataque a los titanes 1" / "…, vol. 3" → "Ataque a los titanes"
 function nombreBaseSaga(titulo) {
   const partes = String(titulo || '').split(/\s*[.:(\-–—]\s+|\s*\(/);
-  return (partes[0] || titulo).trim();
+  const base = (partes[0] || titulo).trim();
+  const sinNumero = base.replace(/(?:[\s,]+(?:tomo|libro|vol(?:umen)?|n\.?º?|n[uú]mero)\.?\s*\d{0,3}|[\s,#]+\d{1,3})$/i, '').trim();
+  return sinNumero.length >= 3 ? sinNumero : base;
+}
+
+// ¿Tiene letras latinas? "諫山創" no; "Hajime Isayama" sí
+const latino = s => /[A-Za-zÀ-ÿ]/.test(String(s || ''));
+
+// El nombre de autor más repetido, prefiriendo los escritos en letras latinas
+function autorLegible(nombres) {
+  const cuenta = new Map();
+  nombres.filter(Boolean).forEach(n => cuenta.set(n, (cuenta.get(n) || 0) + 1));
+  const orden = [...cuenta.keys()].sort((a, b) => latino(b) - latino(a) || cuenta.get(b) - cuenta.get(a));
+  return orden[0] || '';
 }
 
 function numeroEnTitulo(titulo) {
@@ -95,7 +112,12 @@ async function wdEntidades(ids) {
 
 // 'mul' = etiqueta común a todos los idiomas: Wikidata ya no repite es/en en nombres propios
 // (la serie Harry Potter y J. K. Rowling solo la tienen en 'mul')
-const wdNombre = e => { const l = (e && e.labels) || {}; return (l.es || l.mul || l.en || {}).value || ''; };
+// Si la etiqueta común está en otra escritura (autores japoneses: "諫山創"), vale más la inglesa
+const wdNombre = e => {
+  const l = (e && e.labels) || {};
+  const nombres = ['es', 'mul', 'en'].map(k => (l[k] || {}).value).filter(Boolean);
+  return nombres.find(latino) || nombres[0] || '';
+};
 const wdDecl   = (e, p) => ((e && e.claims && e.claims[p]) || []).filter(c => c.mainsnak.snaktype === 'value');
 const wdIds    = (e, p) => wdDecl(e, p).map(c => c.mainsnak.datavalue.value.id).filter(Boolean);
 
@@ -176,30 +198,70 @@ async function olLibrosDe(nombreSaga, autor, sagaConfirmada) {
   const sinArticulo = nombreSaga.replace(/^(la|el|los|las|the)\s+/i, '');
   const params = { title: sinArticulo, fields: 'title,author_name,first_publish_year', limit: '100' };
   const d = await (await fetchT(OL_SEARCH + '?' + new URLSearchParams(params), {}, 15000)).json();
+  return agruparTomosOL(d.docs, nombreSaga, autor, sagaConfirmada);
+}
 
+const PALABRAS_TOMO = /\b(tomo|libro|volumen|vol|parte|n|no|numero)\b/g;
+
+// Ordena lo que devuelve Open Library → { libros: [{ titulo, num, incluir }], autor }.
+// Cada título se clasifica por lo que sigue al nombre de la saga:
+//   "… 1", "… 01", "… tomo 3"   → tomo: uno por número (las ediciones repetidas se juntan)
+//   "… Antes de la caída 14"     → spin-off: va aparte y sin marcar
+//   "… Tomo 1 del testamento…"   → otro: se deja tal cual (La Biblia de los Caídos
+//                                   tiene varios "Tomo 1", uno por testamento)
+// Con al menos dos tomos numerados (mangas, cómics) la lista sigue esos números;
+// si no, el orden de publicación, como antes.
+function agruparTomosOL(docs, nombreSaga, autor, sagaConfirmada) {
   const base = norm(nombreSaga);
   // Con un nombre largo y distintivo basta el título: hay sagas con varios autores
   // (en La Biblia de los Caídos cada testamento lo firma alguien distinto).
   const exigirAutor = base.length < 15;
   const vistos = new Map();
-  for (const doc of d.docs || []) {
-    if (!norm(doc.title).startsWith(base)) continue;
+  const autores = [];
+  for (const doc of docs || []) {
+    const nt = norm(doc.title);
+    if (!nt.startsWith(base)) continue;
     if (exigirAutor && !(doc.author_name || []).some(a => mismoAutor(a, autor))) continue;
+    autores.push(...(doc.author_name || []));
     const titulo = limpiarTituloOL(doc.title);
-    const k = norm(titulo);
+    const m = nt.slice(base.length).trim().match(/^(.*?)\b(\d{1,3})\b(.*)$/);
+    const antes = m ? m[1].replace(PALABRAS_TOMO, '').trim() : '';
+    const num = m ? Number(m[2]) : null;
+    let tipo, k;
+    if (m && !antes && !m[3].trim()) { tipo = 'tomo';  k = 't' + num; }
+    else if (m && antes)             { tipo = 'extra'; k = 'x' + antes + '|' + num; }
+    else                             { tipo = 'otro';  k = norm(titulo); }
     const anio = doc.first_publish_year || 9999;
-    if (!vistos.has(k) || vistos.get(k).anio > anio) vistos.set(k, { titulo, anio });
+    if (!vistos.has(k) || vistos.get(k).anio > anio) vistos.set(k, { titulo, anio, tipo, num });
   }
-  if (!sagaConfirmada && [...vistos.keys()].filter(k => numeroEnTitulo(k)).length < 2) return [];
+  const autorFinal = autorLegible([...autores, autor]) || autor;
+  const todos = [...vistos.values()];
+  if (!sagaConfirmada && todos.filter(x => numeroEnTitulo(x.titulo)).length < 2) return { libros: [], autor: autorFinal };
+
+  const tomos = todos.filter(x => x.tipo === 'tomo').sort((a, b) => a.num - b.num);
+  if (tomos.length >= 2) {
+    const extras = todos.filter(x => x.tipo !== 'tomo')
+      .sort((a, b) => a.anio - b.anio || (a.num || 0) - (b.num || 0) || a.titulo.localeCompare(b.titulo));
+    return {
+      autor: autorFinal,
+      libros: [
+        ...tomos.map(x => ({ titulo: nombreSaga.trim() + ' ' + x.num, num: x.num, incluir: true })),
+        ...extras.map(x => ({ titulo: x.titulo, num: '', incluir: false }))
+      ]
+    };
+  }
   // Orden de publicación como primera aproximación; el usuario lo corrige al revisar
-  const lista = [...vistos.values()].sort((a, b) =>
+  const lista = todos.sort((a, b) =>
     a.anio - b.anio || (numeroEnTitulo(a.titulo) || 0) - (numeroEnTitulo(b.titulo) || 0));
-  return lista.map((x, i) => ({ titulo: x.titulo, num: i + 1 }));
+  return { autor: autorFinal, libros: lista.map((x, i) => ({ titulo: x.titulo, num: i + 1, incluir: true })) };
 }
 
 // Open Library trae "Biblia de Los Caídos. Tomo 1 Del Testamento Del Gris": se deja legible
 function limpiarTituloOL(t) {
-  return String(t).replace(/\s+/g, ' ').trim()
+  let s = String(t).replace(/\s+/g, ' ').trim();
+  // "ATAQUE A LOS TITANES. ANTES DE LA CAÍDA 3" → "Ataque a los titanes. antes de la caída 3"
+  if (/[A-ZÁÉÍÓÚÑ]{4}/.test(s) && s === s.toUpperCase()) s = s.charAt(0) + s.slice(1).toLowerCase();
+  return s
     .replace(/\b(De|Del|La|Las|Los|El|Y|En)\b/g, (m, palabra, pos) => pos === 0 ? m : m.toLowerCase());
 }
 
@@ -230,14 +292,18 @@ async function descubrirSaga(libro) {
   // Wikidata no sabe nada, o sabe que la saga existe pero sin libros
   const nombre = serie ? serie.nombre : nombreBaseSaga(libro.titulo);
   try {
-    const libros = await olLibrosDe(nombre, libro.autor, !!serie);
-    if (libros.length >= 2) {
+    const r = await olLibrosDe(nombre, libro.autor, !!serie);
+    if (r.libros.filter(x => x.incluir).length >= 2) {
       return {
-        nombre, autor: libro.autor, fuente: 'openlibrary', wikidata: serie ? serie.wikidata : '',
-        libros: libros.map(x => ({ ...x, incluir: true }))
+        nombre, autor: autorLegible([serie && serie.autor, r.autor, libro.autor]),
+        fuente: 'openlibrary', wikidata: serie ? serie.wikidata : '', libros: r.libros
       };
     }
   } catch (e) { console.warn('Open Library:', e.message); }
 
   return null;
+}
+
+if (typeof module !== 'undefined') {
+  module.exports = { descubrirSaga, norm, mismoTitulo, mismoAutor, nombreBaseSaga, numeroEnTitulo, wdNombre, autorLegible, agruparTomosOL, limpiarTituloOL };
 }
