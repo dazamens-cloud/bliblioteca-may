@@ -47,7 +47,7 @@ Rama de trabajo: `claude/biblioteca-cocina-sync-e76l6l` (parte de `main`).
 `tests/actividad.test.js`:
 
 ```js
-// Pruebas de actividad.js: node --test tests/
+// Pruebas de actividad.js: node --test tests/*.test.js
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const A = require('../actividad.js');
@@ -119,7 +119,7 @@ test('ritmo: en diciembre dice «este mes» y en singular «1 libro»', () => {
 
 - [ ] **Step 2: Ver que fallan**
 
-Run: `cd /home/user/bliblioteca-may && node --test tests/`
+Run: `cd /home/user/bliblioteca-may && node --test tests/*.test.js`
 Expected: FAIL con `Cannot find module '../actividad.js'`.
 
 - [ ] **Step 3: Implementar `actividad.js`**
@@ -215,7 +215,7 @@ La ordenación de `reparto` deja «Sin ubicación» detrás de las baldas con el
 
 - [ ] **Step 4: Ver que pasan**
 
-Run: `node --test tests/`
+Run: `node --test tests/*.test.js`
 Expected: `# pass 7`, `# fail 0`.
 
 - [ ] **Step 5: Commit**
@@ -316,7 +316,7 @@ module.exports = { crearBackend };
 `tests/code-gs.test.js`:
 
 ```js
-// Pruebas del backend (Code.gs) con Google simulado: node --test tests/
+// Pruebas del backend (Code.gs) con Google simulado: node --test tests/*.test.js
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { crearBackend } = require('./gas-simulado.js');
@@ -370,7 +370,7 @@ test('las propiedades RETO_ no aparecen como perfiles', () => {
 
 - [ ] **Step 3: Ver que fallan**
 
-Run: `node --test tests/`
+Run: `node --test tests/*.test.js`
 Expected: las pruebas de `code-gs.test.js` fallan (`r.reto` es `undefined`, `guardarReto` responde `accion desconocida`). Las de actividad siguen pasando.
 
 - [ ] **Step 4: Implementar en `Code.gs`**
@@ -421,7 +421,7 @@ Añadir al comentario de cabecera, tras el párrafo de PERFILES:
 
 - [ ] **Step 5: Ver que pasan**
 
-Run: `node --test tests/`
+Run: `node --test tests/*.test.js`
 Expected: `# pass 13`, `# fail 0`.
 
 - [ ] **Step 6: Commit**
@@ -506,7 +506,7 @@ function guardarMeta(anio, meta) {
 
 - [ ] **Step 5: Comprobar sintaxis y pruebas**
 
-Run: `node --check script.js && node --test tests/`
+Run: `node --check script.js && node --test tests/*.test.js`
 Expected: sin salida de `--check`; `# fail 0`.
 
 - [ ] **Step 6: Commit**
@@ -1045,7 +1045,7 @@ function crearDesdeSaga(sagaId, indice, tengo, abrir = true) {
 
 - [ ] **Step 7: Comprobar y commit (Task 5 + 6)**
 
-Run: `node --check script.js && node --test tests/`
+Run: `node --check script.js && node --test tests/*.test.js`
 Expected: sin errores; `# fail 0`.
 
 ```bash
@@ -2193,7 +2193,7 @@ function renderTodo() {
 
 - [ ] **Step 3: Comprobar y commit**
 
-Run: `node --check script.js && node --test tests/`
+Run: `node --check script.js && node --test tests/*.test.js`
 Expected: sin errores; `# fail 0`.
 
 ```bash
@@ -2234,7 +2234,7 @@ En la tabla de ficheros, sustituir las filas por:
 | `style.css` | Diseño: temas noche y pergamino |
 | `sw.js` | Service worker: funciona sin conexión |
 | `apps-script/Code.gs` | Backend. Se pega en el editor de Apps Script |
-| `tests/` | Pruebas: `node --test tests/` |
+| `tests/` | Pruebas: `node --test tests/*.test.js` |
 ```
 
 Tras el párrafo «Si `URL_SCRIPT` se deja vacía…», añadir:
@@ -2409,7 +2409,7 @@ Expected: `cola tras guardarReto antiguo: 0` y ningún error JS.
 
 - [ ] **Step 6: Pruebas y parar el servidor**
 
-Run: `node --test /home/user/bliblioteca-may/tests/`
+Run: `node --test /home/user/bliblioteca-may/tests/*.test.js`
 Expected: `# fail 0`.
 
 ---
