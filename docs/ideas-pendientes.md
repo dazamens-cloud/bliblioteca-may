@@ -43,9 +43,26 @@ Fuera del rediseño Noche porque obligan a guardar información que hoy no se gu
 - citas y notas al margen;
 - «Avisarme» cuando salga un tomo nuevo de una saga.
 
-## Abrir la app a más gente
+## Abrir la app a más gente y comercializarla
 
-Hoy cada casa necesita su propio Apps Script. Para que la use cualquiera haría falta un
-backend de verdad (por ejemplo Firebase o Supabase), registro con correo o Google en
-vez de PIN, cuidar la privacidad de los datos y más cuota de Google Books.
-El diseño, las pantallas, la detección de sagas y Actividad se aprovechan tal cual.
+Resumen completo, con tablas: https://claude.ai/artifact/RuuG5fG9ezCfPeMPBg525r
+(página privada del dueño del repo).
+
+- **Técnico:** un backend común (por ejemplo Supabase) con cuentas de verdad en vez de
+  un Apps Script por casa y PIN; escáner para iPhone. El diseño, las pantallas, las
+  sagas y Actividad se aprovechan tal cual.
+- **Supabase** (precios de septiembre de 2026, supabase.com/pricing):
+  - Gratis: 50.000 usuarios activos al mes, 500 MB de base de datos (un libro ≈ 1 KB),
+    5 GB de tráfico al mes, 2 proyectos. **Se pausa tras una semana sin uso** y no hace
+    copias de seguridad. Sobra para uso propio o de amigos.
+  - Pro: desde 25 $/mes, copias diarias y sin pausa. Necesario con clientes.
+- **Datos de libros:** revisar las condiciones de Google Books para uso comercial (y pedir
+  más cuota); Open Library pide no saturarlo (usar caché); Wikidata es CC0; las portadas
+  son de las editoriales (zona gris, consultar).
+- **Legal y fiscal (España/UE):** RGPD, aviso legal y términos; alta como autónomo o
+  sociedad; IVA de servicios digitales por OSS; un nombre propio registrable (OEPM/EUIPO).
+- **Venta:** web con Stripe, o tiendas (Google Play 25 $ una vez; App Store 99 $/año;
+  comisión del 15–30 %). Modelo *freemium*: gratis hasta ~100 libros, premium con libros
+  ilimitados, Actividad completa, temas y bibliotecas en familia.
+- **Orden:** validar con 10–20 amigos → página con lista de espera → nombre → backend y
+  cuentas → legal y cobro.
