@@ -13,6 +13,9 @@
 // tocar el código ni redesplegar. Cambiar el PIN cierra su sesión en
 // todos los móviles.
 //
+// RETO: la meta de libros del año de cada perfil va en la propiedad
+// RETO_ana (la escribe la app; no hace falta tocarla a mano).
+//
 // ⚠️ Al cambiar este código: Implementar → NUEVA implementación.
 // Redesplegar la existente no sirve el código nuevo (ver README).
 // =============================================
@@ -60,7 +63,7 @@ function doGet(e) {
 
   switch (p.accion) {
     case 'ping':        return json({ ok: true });
-    case 'todo':        return json({ ok: true, libros: leer('LIBROS', p.perfil), sagas: leer('SAGAS', p.perfil) });
+    case 'todo':        return json({ ok: true, libros: leer('LIBROS', p.perfil), sagas: leer('SAGAS', p.perfil), reto: leerReto(p.perfil) });
     case 'googleBooks': return json(googleBooks(p.q));
     default:            return json({ ok: false, error: 'accion desconocida' });
   }
@@ -81,6 +84,9 @@ function doPost(e) {
       case 'borrarLibro':  borrar('LIBROS', perfil, d.id);     break;
       case 'guardarSaga':  guardar('SAGAS', perfil, d.saga);   break;
       case 'borrarSaga':   borrar('SAGAS', perfil, d.id);      break;
+      case 'guardarReto':
+        if (!guardarReto(perfil, d.anio, d.meta)) return json({ ok: false, error: 'meta' });
+        break;
       case 'subirTodo':
         (d.libros || []).forEach(function (l) { guardar('LIBROS', perfil, l); });
         (d.sagas  || []).forEach(function (s) { guardar('SAGAS', perfil, s); });
@@ -199,6 +205,25 @@ function obtenerHoja(nombre, perfil) {
     hoja.setFrozenRows(1);
   }
   return hoja;
+}
+
+// ── RETO ANUAL ────────────────────────────────
+// Una meta por año y perfil, en la propiedad del script RETO_ana = {"2026": 20}.
+// No va en la hoja: es un dato por perfil, no una fila.
+
+function leerReto(perfil) {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('RETO_' + perfil) || '{}'); }
+  catch (err) { return {}; }
+}
+
+function guardarReto(perfil, anio, meta) {
+  anio = String(anio);
+  meta = Number(meta);
+  if (!/^\d{4}$/.test(anio) || !Number.isInteger(meta) || meta < 1 || meta > 100) return false;
+  const reto = leerReto(perfil);
+  reto[anio] = meta;
+  PropertiesService.getScriptProperties().setProperty('RETO_' + perfil, JSON.stringify(reto));
+  return true;
 }
 
 // ── GOOGLE BOOKS (la clave no sale del servidor) ──
