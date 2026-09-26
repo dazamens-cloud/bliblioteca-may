@@ -579,24 +579,35 @@ function portadaHTML(l, clase) {
   </div>`;
 }
 
-function badgesLibro(l) {
-  const b = [];
-  const s = sagaDe(l);
-  if (s) b.push(`<span class="badge serie">${esc(s.nombre)}${l.saga_num !== '' ? ' #' + l.saga_num : ''}</span>`);
-  if (!l.tengo) b.push('<span class="badge deseado">Lo quiero</span>');
-  else b.push(`<span class="badge ${l.lectura}">${ESTADOS[l.lectura]}</span>`);
-  if (l.prestado_a) b.push('<span class="badge prestado">Prestado</span>');
-  return b.join('');
+// 3 → "III". Los números con decimales (2.5) o grandes se dejan como están.
+function romano(n) {
+  n = Number(n);
+  if (!Number.isInteger(n) || n < 1 || n > 39) return String(n);
+  return 'X'.repeat(Math.floor(n / 10)) + ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'][n % 10];
+}
+
+const estrellasTexto = v => '★'.repeat(v) + '☆'.repeat(5 - v);
+
+function estadoLibro(l) {
+  if (!l.tengo)     return { clase: 'deseo', texto: 'Lo quiero' };
+  if (l.prestado_a) return { clase: 'prestado', texto: 'Prestado' };
+  return { clase: l.lectura, texto: ESTADOS[l.lectura] };
 }
 
 function tarjetaLibro(l) {
+  const s = sagaDe(l);
+  const e = estadoLibro(l);
+  const saga = s ? esc(s.nombre) + (l.saga_num !== '' ? ' · ' + esc(romano(l.saga_num)) : '') : '';
   const izq = l.prestado_a ? `${ic('local_library')}A ${esc(l.prestado_a)}`
-            : l.ubicacion  ? `${ic('shelves')}${esc(l.ubicacion)}` : '';
-  const der = l.lectura === 'leyendo' && l.pagina ? `Pág. ${esc(l.pagina)}` : esc(l.anio);
+            : !l.tengo      ? 'Aún no está en casa'
+            : l.ubicacion   ? `${ic('shelves')}${esc(l.ubicacion)}` : '';
+  const der = l.valoracion ? `<span class="estrellitas" aria-label="${l.valoracion} de 5 estrellas">${estrellasTexto(l.valoracion)}</span>`
+            : l.lectura === 'leyendo' && l.pagina ? `Pág. ${esc(l.pagina)}`
+            : l.paginas ? `${esc(l.paginas)} págs.` : esc(l.anio);
   return `<article class="libro" data-libro="${esc(l.id)}">
     ${portadaHTML(l)}
     <div class="info">
-      <div class="badges">${badgesLibro(l)}</div>
+      <div class="arriba"><span class="saga-tag">${saga}</span><span class="estado e-${e.clase}">${e.texto}</span></div>
       <h3>${esc(l.titulo)}</h3>
       <p>${esc(l.autor)}</p>
       ${izq || der ? `<div class="pie"><span>${izq}</span><span>${der}</span></div>` : ''}
@@ -611,19 +622,22 @@ function porcentaje(l) {
 
 function tarjetaLeyendo(l) {
   const pct = porcentaje(l);
+  const s = sagaDe(l);
+  const ceja = s ? esc(s.nombre) + (l.saga_num !== '' ? ' · libro ' + esc(romano(l.saga_num)) : '') : 'Leyendo';
   return `<div class="leyendo-card">
     <div data-libro="${esc(l.id)}">${portadaHTML(l)}</div>
     <div class="cuerpo">
       <div data-libro="${esc(l.id)}">
-        <div class="etiqueta">${pct ? 'En progreso · ' + pct + '%' : 'Leyendo'}</div>
+        <div class="ceja">${ceja}</div>
         <h3>${esc(l.titulo)}</h3>
         <div class="autor">${esc(l.autor)}</div>
-        ${l.paginas ? `<div class="pags">${ic('menu_book')}Pág. ${esc(l.pagina || 0)} de ${esc(l.paginas)}</div>` : ''}
       </div>
-      ${l.paginas ? `<div class="barra"><div style="width:${pct}%"></div></div>` : ''}
+      ${l.paginas ? `<div class="pags"><span>Pág. ${esc(l.pagina || 0)} de ${esc(l.paginas)}</span><span>${pct}%</span></div>
+      <div class="barra"><div style="width:${pct}%"></div></div>` : ''}
       <div class="fila">
-        <button class="btn" data-sumar-paginas="${esc(l.id)}" data-n="10">+10 págs.</button>
-        <button class="btn secundario cuadrado" data-terminar="${esc(l.id)}" aria-label="Marcar como leído">${ic('done_all')}</button>
+        <button class="btn secundario" data-sumar-paginas="${esc(l.id)}" data-n="10">+10 págs.</button>
+        <button class="btn secundario" data-sumar-paginas="${esc(l.id)}" data-n="25">+25</button>
+        <button class="btn" data-terminar="${esc(l.id)}">${ic('done_all')}Terminado</button>
       </div>
     </div>
   </div>`;
@@ -642,27 +656,28 @@ function renderBiblioteca() {
   $('#chips').innerHTML = Object.keys(FILTROS).map(k =>
     `<button data-filtro="${k}" class="${k === filtro ? 'active' : ''}">${nombres[k]}<span class="n">${libros.filter(FILTROS[k]).length}</span></button>`).join('');
 
-  // Resumen: métricas, sagas con huecos y lo que estoy leyendo
+  // Resumen: cifras, sagas con huecos y lo que estoy leyendo
   let panel = '';
   if (libros.length) {
     const tengo = libros.filter(l => l.tengo).length;
     const leyendo = libros.filter(l => l.lectura === 'leyendo');
     const leidos = libros.filter(l => l.lectura === 'leido').length;
+    const esteAnio = leidosDelAnio(libros, new Date().getFullYear()).length;
     panel += `<div class="metricas">
-      <div class="metrica"><div class="et">Total</div><div class="num">${tengo}</div><div class="sub">En casa</div></div>
-      <div class="metrica activa"><div class="et">Activos</div><div class="num">${leyendo.length}</div><div class="sub">Leyendo</div></div>
-      <div class="metrica"><div class="et">Completos</div><div class="num">${leidos}</div><div class="sub">Leídos</div></div>
+      <div class="metrica"><div class="et">En casa</div><div class="num">${tengo}</div><div class="sub">${tengo === 1 ? 'libro' : 'libros'}</div></div>
+      <div class="metrica activa"><div class="et">● Leyendo</div><div class="num">${leyendo.length}</div><div class="sub">ahora</div></div>
+      <div class="metrica"><div class="et">Leídos</div><div class="num">${leidos}</div><div class="sub">${esteAnio} este año</div></div>
     </div>`;
 
     const conHuecos = sagas.map(s => ({ s, p: progresoSaga(s) })).filter(x => x.p.faltanTener > 0);
     if (conHuecos.length) {
       const total = conHuecos.reduce((n, x) => n + x.p.faltanTener, 0);
       const nombresSagas = conHuecos.map(x => x.s.nombre);
-      panel += `<button class="alerta-sagas" data-ir="screenSagas">
+      panel += `<button class="alerta-sagas" data-ir="screenSagas" data-filtro-sagas="faltan">
         <span class="cuadro">${ic('bookmark_border')}</span>
         <span class="txt">
-          <strong>${total === 1 ? 'Te falta 1 libro' : 'Te faltan ' + total + ' libros'} de tus sagas</strong>
-          <span class="detalle-alerta">${esc(nombresSagas.slice(0, 2).join(', '))}${nombresSagas.length > 2 ? ' y ' + (nombresSagas.length - 2) + ' más' : ''}</span>
+          <strong>${total === 1 ? 'Te falta 1 libro' : 'Te faltan ' + total + ' libros'}</strong>
+          <span class="detalle-alerta">Sagas a medias: ${esc(nombresSagas.slice(0, 2).join(', '))}${nombresSagas.length > 2 ? ' y ' + (nombresSagas.length - 2) + ' más' : ''}</span>
         </span>
         ${ic('arrow_forward')}
       </button>`;
@@ -670,12 +685,13 @@ function renderBiblioteca() {
 
     if (leyendo.length && filtro === 'todos' && !q) {
       panel += `<div class="titulo-seccion"><h2>Leyendo ahora</h2>${leyendo.length > 1 ? `<span>${leyendo.length} libros</span>` : ''}</div>`;
-      panel += leyendo.slice(0, 2).map(tarjetaLeyendo).join('');
-      panel += `<div class="titulo-seccion"><h2>Mi estantería</h2><span>${lista.length} de ${libros.length}</span></div>`;
+      panel += leyendo.map(tarjetaLeyendo).join('');
     }
   }
   $('#panelResumen').innerHTML = panel;
   $('#panelResumen').hidden = !panel;
+  $('#tituloEstanteria').innerHTML = libros.length ? `<h2>Mi estantería</h2><span>${lista.length} de ${libros.length}</span>` : '';
+  $('#tituloEstanteria').hidden = !libros.length;
 
   $('#listaLibros').innerHTML = lista.length ? lista.map(tarjetaLibro).join('') :
     libros.length ? '<p class="vacio">Nada por aquí con ese filtro.</p>' :
@@ -1008,44 +1024,72 @@ function abrirEditorSaga(saga, libro) {
 }
 
 const FILTROS_SAGA = {
-  todas:      { nombre: 'Todas',        f: () => true },
-  faltan:     { nombre: 'Te faltan',    f: p => p.faltanTener > 0 },
-  porleer:    { nombre: 'Por terminar', f: p => p.faltanLeer > 0 },
-  terminadas: { nombre: 'Terminadas',   f: p => p.faltanLeer === 0 }
+  todas:     { nombre: 'Todas',     f: () => true },
+  faltan:    { nombre: 'Te faltan', f: p => p.faltanTener > 0 },
+  completas: { nombre: 'Completas', f: p => p.faltanTener === 0 }
 };
 let filtroSagas = 'todas';
+
+// Un tomo en la fila de la saga: su portada, o un hueco si te falta
+function tomoHTML(s, f, i) {
+  const n = f.num !== '' ? 'Tomo ' + esc(romano(f.num)) : 'Tomo';
+  const titulo = esc(tituloCorto(f.titulo, s.nombre));
+  if (!f.libro) {
+    return `<div class="tomo falta">
+      <div class="hueco" aria-hidden="true">${f.num !== '' ? esc(romano(f.num)) : '?'}</div>
+      <small>${n}</small><span>${titulo}</span>
+      <button class="quiero" data-quiero-tomo="${esc(s.id)}" data-indice="${i}" aria-label="Añadir «${esc(f.titulo)}» a Lo quiero">+ Lo quiero</button>
+    </div>`;
+  }
+  return `<div class="tomo ${f.estado}" data-libro="${esc(f.libro.id)}">
+    ${portadaHTML(f.libro, 'mini')}
+    <small>${n} · ${TEXTOS[f.estado]}</small><span>${titulo}</span>
+  </div>`;
+}
 
 function renderSagas() {
   const cont = $('#listaSagas');
   const todas = sagas.map(s => ({ s, p: progresoSaga(s) }));
+  const completas = todas.filter(x => x.p.faltanTener === 0).length;
+
+  $('#resumenSagas').innerHTML = sagas.length ? `<div class="resumen-sagas">
+      <span class="cuadro">${ic('collections_bookmark')}</span>
+      <div>
+        <strong>${sagas.length === 1 ? '1 saga en marcha' : sagas.length + ' sagas en marcha'}</strong>
+        <span>${completas} ${completas === 1 ? 'completa' : 'completas'} · ${sagas.length - completas} con tomos por reunir</span>
+      </div>
+    </div>` : '';
+
   $('#chipsSagas').innerHTML = sagas.length ? Object.entries(FILTROS_SAGA).map(([k, v]) =>
-    `<button data-filtro-saga="${k}" class="${k === filtroSagas ? 'active' : ''}">${v.nombre}<span class="n">${todas.filter(x => v.f(x.p)).length}</span></button>`).join('') : '';
+    `<button data-filtro-saga="${k}" class="${k === filtroSagas ? 'active' : ''}">${v.nombre}<span class="n">${todas.filter(x => v.f(x.p)).length}</span></button>`).join('')
+    + `<button data-nueva-saga>${ic('add')}Nueva</button>` : '';
 
   if (!sagas.length) {
     cont.innerHTML = `<div class="bienvenida">
       ${ic('collections_bookmark')}
       <h2>Aún no hay sagas</h2>
-      <p>Se crean solas cuando añades o empiezas un libro que forma parte de una. También puedes crear una a mano.</p>
+      <p>Se crean solas cuando añades un libro que forma parte de una. También puedes crear una a mano.</p>
+      <button class="btn" data-nueva-saga>${ic('add')}Crear una saga a mano</button>
     </div>`;
     return;
   }
   const lista = todas.filter(x => FILTROS_SAGA[filtroSagas].f(x.p))
-    .sort((a, b) => (a.p.faltanLeer === 0) - (b.p.faltanLeer === 0) || a.s.nombre.localeCompare(b.s.nombre));
+    .sort((a, b) => (a.p.faltanTener === 0) - (b.p.faltanTener === 0) || a.s.nombre.localeCompare(b.s.nombre));
   cont.innerHTML = lista.length ? lista.map(({ s, p }) => {
-    const faltan = p.filas.filter(f => f.estado === 'falta').map(f => f.titulo);
-    const pct = p.total ? Math.round(p.leidos / p.total * 100) : 0;
+    const pct = p.total ? Math.round(p.tienes / p.total * 100) : 0;
     return `<article class="saga" data-abrir-saga="${esc(s.id)}">
       <div class="cab">
         <div>
+          <div class="ceja">Saga · ${p.total === 1 ? '1 tomo' : p.total + ' tomos'}</div>
           <h3>${esc(s.nombre)}</h3>
           <p class="autor">${esc(s.autor)}</p>
         </div>
-        ${p.faltanLeer === 0 ? `<span class="badge leido">${ic('task_alt')}Terminada</span>` :
-          p.faltanTener ? `<span class="badge deseado">${p.faltanTener === 1 ? 'Falta 1' : 'Faltan ' + p.faltanTener}</span>` : ''}
+        ${p.faltanTener ? `<span class="etiqueta-saga falta">${p.faltanTener === 1 ? 'Falta 1' : 'Faltan ' + p.faltanTener}</span>`
+                        : `<span class="etiqueta-saga completa">${ic('task_alt')}Completa</span>`}
       </div>
-      ${barra(p)}
-      <div class="cifras"><span>Leídos ${p.leidos} de ${p.total} · ${p.tienes} en casa</span><span class="pct">${pct}%</span></div>
-      ${faltan.length ? `<div class="faltan">${ic('bookmark_border')}<span>Te falta: <b>${faltan.slice(0, 2).map(esc).join('</b> y <b>')}</b>${faltan.length > 2 ? ' y ' + (faltan.length - 2) + ' más' : ''}</span></div>` : ''}
+      <div class="barra${pct === 100 ? ' completa' : ''}"><div style="width:${pct}%"></div></div>
+      <div class="cifras"><span>${p.tienes} de ${p.total} en casa · ${p.leidos} ${p.leidos === 1 ? 'leído' : 'leídos'}</span><span class="pct">${pct}%</span></div>
+      <div class="tomos">${p.filas.map((f, i) => tomoHTML(s, f, i)).join('')}</div>
     </article>`;
   }).join('') : '<p class="vacio">Ninguna saga con ese filtro.</p>';
 }
