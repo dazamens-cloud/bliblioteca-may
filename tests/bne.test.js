@@ -38,7 +38,7 @@ function preparar(xml, codigo = 200) {
 test('God of Malice: título, autor, editorial, año y páginas del MARC', () => {
   const b = preparar(sru(godOfMalice));
   assert.deepEqual(b.bne('979-13-87924-71-3').libro, {
-    titulo: 'God of malice', autor: 'Rina Kent', editorial: 'Montena', anio: '2025', paginas: 528
+    titulo: 'God of malice. Un dark romance universitario', autor: 'Rina Kent', editorial: 'Montena', anio: '2025', paginas: 528
   });
   assert.equal(b.urls.length, 1);
   assert.ok(b.urls[0].startsWith('https://catalogo.bne.es/view/sru/34BNE_INST?'));
@@ -99,7 +99,7 @@ test('año del 008 si no hay otro; editoriales S.L.', () => {
 
 test('si llegan varios, se queda con el de este ISBN', () => {
   const otro = [campo('020', [['a', '9788400000000']]), campo('245', [['a', 'Otro libro']])];
-  assert.equal(preparar(sru(otro, godOfMalice)).bne('9791387924713').libro.titulo, 'God of malice');
+  assert.equal(preparar(sru(otro, godOfMalice)).bne('9791387924713').libro.titulo, 'God of malice. Un dark romance universitario');
 });
 
 test('sin resultados, ISBN no válido o error de la BNE: responde sin romperse', () => {

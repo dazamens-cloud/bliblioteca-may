@@ -318,10 +318,12 @@ function nombreMarc(s) {
 }
 
 function libroMarc(r) {
-  // Título: 245 $a, más número y nombre de parte ($n, $p) si los hay
+  // Título: 245 $a, más número y nombre de parte ($n, $p) y subtítulo ($b):
+  // en algunas sagas los libros solo se distinguen por el subtítulo
   const t245 = (r['245'] || [{ sub: {} }])[0].sub;
-  const titulo = [(t245.a || [''])[0]].concat(t245.n || [], t245.p || [])
-    .map(limpiarMarc).filter(String).join('. ');
+  const titulo = [(t245.a || [''])[0]].concat(t245.n || [], t245.p || [], (t245.b || []).slice(0, 1))
+    .map(limpiarMarc).filter(String)
+    .map(function (x, i) { return i ? x.charAt(0).toUpperCase() + x.slice(1) : x; }).join('. ');
 
   // Autor: 100; si no hay, el primer 700 que no sea traductor ni ilustrador;
   // si tampoco, la mención de la portada (245 $c)
