@@ -21,7 +21,8 @@ function preparar(registros) {
   b.urls = [];
   b.ctx.UrlFetchApp.fetch = url => {
     b.urls.push(url);
-    const q = decodeURIComponent(url.split('isbn=')[1]).split(' OR ');
+    const q = decodeURIComponent(url.split('isbn=')[1]).split(' OR ').map(f => f.replace(/^"|"$/g, ''));
+    assert.ok(decodeURIComponent(url).split('isbn=')[1].split(' OR ').every(f => /^".+"$/.test(f)), 'cada forma entre comillas');
     // La API devuelve los registros cuyo ISBN contiene alguna de las formas
     const data = registros.filter(r => q.some(f => r.isbn.includes(f)));
     return { getResponseCode: () => 200, getContentText: () => JSON.stringify({ success: true, data }) };

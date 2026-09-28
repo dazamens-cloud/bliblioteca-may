@@ -251,9 +251,8 @@ function bne(isbn) {
   isbn = String(isbn || '').replace(/[^0-9Xx]/g, '').toUpperCase();
   if (!/^(\d{13}|\d{9}[\dX])$/.test(isbn)) return { ok: false, error: 'isbn' };
   const formas = formasIsbn(isbn);
-  const url = 'https://apidatosabiertos.bne.es/api/mon?isbn=' + encodeURIComponent(formas.todas.join(' OR '));
   let res;
-  try { res = UrlFetchApp.fetch(url, { muteHttpExceptions: true }); }
+  try { res = UrlFetchApp.fetch(urlBne(formas.todas), { muteHttpExceptions: true }); }
   catch (e) { return { ok: false, error: 'red' }; }
   if (res.getResponseCode() !== 200) return { ok: false, error: 'http ' + res.getResponseCode() };
   let d;
@@ -265,6 +264,13 @@ function bne(isbn) {
   });
   if (!reg) return { ok: true, libro: null };
   return { ok: true, libro: libroBne(reg) };
+}
+
+// Cada forma entre comillas: sin ellas el buscador de la BNE toma el guion
+// de "979-13" como una orden y contesta "no such column: 13".
+function urlBne(formas) {
+  const q = formas.map(function (f) { return '"' + f + '"'; }).join(' OR ');
+  return 'https://apidatosabiertos.bne.es/api/mon?isbn=' + encodeURIComponent(q);
 }
 
 // La BNE guarda el ISBN con guiones (979-13-87924-71-3) y dónde van depende
@@ -350,12 +356,18 @@ function libroBne(r) {
 }
 
 // Para probar desde el editor: elegir probarBne y pulsar Ejecutar.
-// En el registro sale lo que contesta la BNE y cómo queda el libro.
+// En el registro sale lo que contesta la BNE a varias formas de preguntar
+// y cómo queda el libro. El segundo es Harry Potter de Salamandra (1999).
 function probarBne() {
-  const isbn = '9791387924713';
-  const url = 'https://apidatosabiertos.bne.es/api/mon?isbn=' + encodeURIComponent(formasIsbn(isbn).todas.join(' OR '));
-  Logger.log(UrlFetchApp.fetch(url, { muteHttpExceptions: true }).getContentText().slice(0, 3000));
-  Logger.log(JSON.stringify(bne(isbn)));
+  const pruebas = ['"979-13-87924-71-3"', '9791387924713', '"84-7888-445-9"', '9788478884452',
+    formasIsbn('9788478884452').todas.map(function (f) { return '"' + f + '"'; }).join(' OR ')];
+  pruebas.forEach(function (q) {
+    const url = 'https://apidatosabiertos.bne.es/api/mon?isbn=' + encodeURIComponent(q);
+    const r = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    Logger.log(q.slice(0, 30) + ' → ' + r.getResponseCode() + ' ' + r.getContentText().slice(0, 700));
+  });
+  Logger.log(JSON.stringify(bne('9788478884452')));
+  Logger.log(JSON.stringify(bne('9791387924713')));
 }
 
 // ── UTILIDADES ────────────────────────────────
