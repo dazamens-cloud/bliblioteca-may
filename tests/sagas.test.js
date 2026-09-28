@@ -86,3 +86,26 @@ test('descubrirSaga: manga sin tomos en Wikidata → lista de Open Library limpi
     assert.equal(p.libros.filter(x => !x.incluir).length, 2);
   } finally { global.fetch = fetchReal; }
 });
+
+// "Asesino de brujas": el nombre de la saga va dentro de todos los títulos
+const asesino = [
+  { titulo: 'Asesino de brujas', num: 1 },
+  { titulo: 'Asesino de brujas 2. La hija de la bruja', num: 2 },
+  { titulo: 'Asesino de brujas 3. Hijos del rey', num: 3 }
+];
+
+test('mejorEntrada: cada libro de Asesino de brujas va con su número', () => {
+  const e = t => S.mejorEntrada(asesino, t, 'Asesino de brujas');
+  assert.equal(e('Asesino de brujas').num, 1);
+  assert.equal(e('Asesino de brujas 2. La hija de la bruja').num, 2);
+  assert.equal(e('Asesino de brujas 3: Hijos del rey (edición especial)').num, 3);
+  assert.equal(e('La hija de la bruja').num, 2);
+  assert.equal(e('Hijos del rey').num, 3);
+  assert.equal(e('Otro libro distinto'), null);
+});
+
+test('mejorEntrada: títulos sin número, gana el más concreto y no el nombre de la saga', () => {
+  const lista = [{ titulo: 'Asesino de brujas', num: 1 }, { titulo: 'Asesino de brujas: La bruja blanca', num: 2 }];
+  assert.equal(S.mejorEntrada(lista, 'Asesino de brujas. La bruja blanca', 'Asesino de brujas').num, 2);
+  assert.equal(S.mejorEntrada(lista, 'Asesino de brujas', 'Asesino de brujas').num, 1);
+});
