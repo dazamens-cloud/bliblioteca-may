@@ -52,6 +52,29 @@ No aplicar: `aria-pressed` en «A mano» (es un botón de acción, no se queda p
 `role="tab"` junto a `aria-pressed`, ni `aria-live` en el aviso (ya lo da
 `role="status"`).
 
+## Service worker (de la revisión de una auditoría externa)
+
+Mejoras pequeñas en `sw.js`; nada roto. La auditoría hablaba de un error de sintaxis
+que rompía la instalación: no existe (el fichero es válido y la app está instalada y
+funcionando).
+
+- **`.catch(() => {})` al guardar en la caché** (`c.put` en `networkFirst` y
+  `cacheFirst`): si guardar falla (por ejemplo, sin espacio), hoy queda un error sin
+  capturar en la consola. El usuario no nota nada.
+- **Reserva sin conexión solo al abrir la página:** en `networkFirst`, devolver
+  `./index.html` solo si `req.mode === 'navigate'`; para otros ficheros no guardados,
+  dejar que falle (`Response.error()`), no responder HTML en lugar de un script.
+- **Limpiar las fuentes viejas:** `CACHE_STATIC` nunca se vacía. Cada vez que cambia la
+  lista de iconos de Material Symbols, la versión anterior se queda guardada. Subir
+  `CACHE_STATIC` a `-v2` cuando cambie esa lista, o limpiar entradas antiguas.
+- **Al renombrar un fichero de la app,** actualizar `APP_SHELL`: si uno da 404, el
+  service worker no se instala (la app sigue funcionando con conexión, pero sin modo
+  sin conexión).
+
+No aplicar su versión «corregida»: responde `null` en dos sitios (un service worker no
+puede responder `null`, el navegador lo trata como error) y renombra `CACHE_APP` sin
+necesidad.
+
 ## Aspecto en el PC
 
 La cabecera y la barra de abajo ocupan todo el ancho mientras el contenido va centrado
