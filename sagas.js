@@ -37,20 +37,34 @@ function mismoTitulo(a, b) {
   return corto.length >= 10 && largo.includes(corto);
 }
 
+// Número de tomo en cualquier parte del título: "Asesino de brujas 2 - Los
+// hijos del rey", "… - Volumen 2", "Tomo 3"
+function numeroSuelto(titulo) {
+  const n = numeroEnTitulo(titulo);
+  if (n !== null) return n;
+  const m = norm(titulo).match(/\b(\d{1,2})\b/);
+  return m ? Number(m[1]) : null;
+}
+
 // De los libros de una saga, el que corresponde a este título. Si varios
 // "coinciden" (en "Asesino de brujas" el nombre de la saga va dentro de todos
-// los títulos), gana: el título idéntico; luego el del mismo número; luego
-// uno que no sea solo el nombre de la saga; y si no, el más largo.
+// los títulos), gana: el título idéntico; luego el del mismo número; si el
+// título es solo el nombre de la saga, el primero; si no, el más concreto.
 function mejorEntrada(entradas, titulo, nombreSaga) {
-  const t = norm(titulo);
-  const cand = (entradas || []).filter(e => mismoTitulo(e.titulo, titulo));
-  if (cand.length < 2) return cand[0] || null;
+  entradas = entradas || [];
+  const t = norm(titulo), saga = norm(nombreSaga);
+  const cand = entradas.filter(e => mismoTitulo(e.titulo, titulo));
   const exacto = cand.find(e => norm(e.titulo) === t);
   if (exacto) return exacto;
-  const n = numeroEnTitulo(titulo);
-  const conNum = n !== null && cand.find(e => e.num !== '' && Number(e.num) === n);
-  if (conNum) return conNum;
-  const saga = norm(nombreSaga);
+  // Con número: la fila de ese número, si encaja por título o lleva el nombre de la saga
+  const n = numeroSuelto(titulo);
+  if (n !== null) {
+    const e = entradas.find(e => e.num !== '' && Number(e.num) === n);
+    if (e && (cand.includes(e) || (saga.length >= 4 && t.includes(saga)))) return e;
+  }
+  if (cand.length < 2) return cand[0] || null;
+  const porNum = (a, b) => (a.num === '' ? 999 : Number(a.num)) - (b.num === '' ? 999 : Number(b.num));
+  if (t === saga) return [...cand].sort(porNum)[0];
   const propios = cand.filter(e => norm(e.titulo) !== saga && t.includes(norm(e.titulo)));
   const lista = propios.length ? propios : cand;
   return lista.reduce((a, b) => norm(b.titulo).length > norm(a.titulo).length ? b : a);
@@ -324,5 +338,5 @@ async function descubrirSaga(libro) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { descubrirSaga, norm, mismoTitulo, mejorEntrada, mismoAutor, nombreBaseSaga, numeroEnTitulo, wdNombre, autorLegible, agruparTomosOL, limpiarTituloOL };
+  module.exports = { descubrirSaga, norm, mismoTitulo, mejorEntrada, numeroSuelto, mismoAutor, nombreBaseSaga, numeroEnTitulo, wdNombre, autorLegible, agruparTomosOL, limpiarTituloOL };
 }
