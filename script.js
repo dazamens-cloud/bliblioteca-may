@@ -402,6 +402,15 @@ function isbnValido(isbn) {
   return false;
 }
 
+// "Asesino de brujas" + "la bruja blanca" → "Asesino de brujas. La bruja blanca".
+// Sin el subtítulo, los libros de algunas sagas se llaman todos igual.
+function conSubtitulo(titulo, sub) {
+  titulo = String(titulo || '').trim();
+  sub = String(sub || '').trim();
+  if (!sub || norm(titulo).includes(norm(sub))) return titulo;
+  return titulo + '. ' + sub.charAt(0).toUpperCase() + sub.slice(1);
+}
+
 // Preferir ediciones españolas (978-84) si una obra tiene varias
 function elegirIsbn(lista) {
   const l = (lista || []).filter(i => i.length === 13);
@@ -415,7 +424,7 @@ async function buscarPorIsbn(isbn) {
 
   const [ed, bus] = await Promise.all([
     fetchT(`${OL}/isbn/${isbn}.json`).then(r => r.ok ? r.json() : null).catch(() => null),
-    fetchT(`${OL}/search.json?isbn=${isbn}&fields=title,author_name,cover_i,number_of_pages_median,first_publish_year&limit=1`)
+    fetchT(`${OL}/search.json?isbn=${isbn}&fields=title,subtitle,author_name,cover_i,number_of_pages_median,first_publish_year&limit=1`)
       .then(r => r.json()).then(d => (d.docs || [])[0]).catch(() => null)
   ]);
 
@@ -423,7 +432,7 @@ async function buscarPorIsbn(isbn) {
     const cover = ed && ed.covers && ed.covers[0] > 0 ? ed.covers[0] : bus && bus.cover_i;
     abrirPreview({
       isbn,
-      titulo:    (ed && ed.title) || (bus && bus.title) || '',
+      titulo:    ed && ed.title ? conSubtitulo(ed.title, ed.subtitle) : bus && bus.title ? conSubtitulo(bus.title, bus.subtitle) : '',
       autor:     ((bus && bus.author_name) || []).join(', '),
       editorial: ((ed && ed.publishers) || [])[0] || '',
       paginas:   (ed && ed.number_of_pages) || (bus && bus.number_of_pages_median) || '',
@@ -450,10 +459,10 @@ async function buscarPorTexto(q) {
   let lista = [];
   try {
     const d = await (await fetchT(`${OL}/search.json?` + new URLSearchParams({
-      q, fields: 'title,author_name,first_publish_year,cover_i,isbn,number_of_pages_median', limit: '20'
+      q, fields: 'title,subtitle,author_name,first_publish_year,cover_i,isbn,number_of_pages_median', limit: '20'
     }))).json();
     lista = (d.docs || []).map(x => ({
-      titulo: x.title, autor: (x.author_name || []).join(', '), anio: x.first_publish_year || '',
+      titulo: conSubtitulo(x.title, x.subtitle), autor: (x.author_name || []).join(', '), anio: x.first_publish_year || '',
       paginas: x.number_of_pages_median || '', isbn: elegirIsbn(x.isbn),
       portada: x.cover_i ? `https://covers.openlibrary.org/b/id/${x.cover_i}-M.jpg` : ''
     }));
@@ -508,7 +517,7 @@ async function googleBooks(q) {
       const v = it.volumeInfo || {};
       const ids = (v.industryIdentifiers || []).map(x => x.identifier);
       return {
-        titulo: v.title + (v.subtitle ? '. ' + v.subtitle : ''), autor: (v.authors || []).join(', '),
+        titulo: conSubtitulo(v.title, v.subtitle), autor: (v.authors || []).join(', '),
         editorial: v.publisher || '', anio: (v.publishedDate || '').slice(0, 4), paginas: v.pageCount || '',
         isbn: elegirIsbn(ids),
         portada: ((v.imageLinks || {}).thumbnail || '').replace('http://', 'https://')
