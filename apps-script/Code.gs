@@ -288,6 +288,8 @@ function registrosMarc(xml) {
       while ((s = reSub.exec(m[2]))) (sub[s[1]] = sub[s[1]] || []).push(entidades(s[2]).trim());
       (campos[tag] = campos[tag] || []).push({ ind2: (m[1].match(/ind2="(.)"/) || [])[1] || ' ', sub: sub });
     }
+    const c008 = trozo.match(/<(?:\w+:)?controlfield\b[^>]*tag="008"[^>]*>([^<]*)</);
+    if (c008 && Object.keys(campos).length) campos._008 = c008[1];
     return campos;
   }).filter(function (c) { return Object.keys(c).length; });
 }
@@ -332,13 +334,19 @@ function libroMarc(r) {
 
   // Editorial y año: 264 de publicación (ind2 = 1) o el 260 antiguo
   const pub = (r['264'] || []).find(function (c) { return c.ind2 === '1'; }) || (r['264'] || [])[0] || (r['260'] || [])[0];
-  const editorial = pub ? limpiarMarc((pub.sub.b || [''])[0]) : '';
-  const anio = ((pub && (pub.sub.c || []).join(' ')) || '').match(/\d{4}/);
+  // Las fichas provisionales traen la razón social: "…, S.A.U." fuera
+  const editorial = pub ? limpiarMarc(limpiarMarc((pub.sub.b || [''])[0])
+    .replace(/,?\s+S\.?\s?(A|L)\.?(\s?U\.?)?$/i, '')) : '';
+  // Año: el de publicación; si no, el del depósito legal ("B 16289-2025")
+  // o, en último caso, el del 008
+  const anio = ((pub && (pub.sub.c || []).join(' ')) || '').match(/\d{4}/) ||
+    subcampos(r, '017', 'a').join(' ').match(/(\d{4})\s*$/) ||
+    (r._008 || '').slice(7, 11).match(/^\d{4}$/);
 
   const ext = subcampos(r, '300', 'a').join(' ');
   const pag = ext.match(/(\d+)\s*p/) || ext.match(/(\d+)/);
 
-  return { titulo: titulo, autor: autor, editorial: editorial, anio: anio ? anio[0] : '', paginas: pag ? Number(pag[1]) : '' };
+  return { titulo: titulo, autor: autor, editorial: editorial, anio: anio ? anio[anio.length - 1] : '', paginas: pag ? Number(pag[1]) : '' };
 }
 
 // Para probar desde el editor: elegir probarBne y pulsar Ejecutar.

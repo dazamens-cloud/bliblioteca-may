@@ -72,6 +72,31 @@ test('manga: número de tomo en 245 $n; sin 100 usa el 700 que no es traductor',
   assert.equal(l.paginas, '');
 });
 
+test('ficha provisional de depósito legal (la de God of Malice de verdad)', () => {
+  const b = preparar(sru([
+    '<controlfield tag="008">260406s2024    sp     |||||| 000 | spa^^</controlfield>',
+    campo('017', [['a', 'B 16289-2025'], ['b', 'Oficina Depósito Legal Barcelona']]),
+    campo('020', [['a', '979-13-87924-71-3']]),
+    campo('245', [['a', 'God of Malice (Legado de Dioses 1)']], '0'),
+    campo('264', [['b', 'Penguin Random House Grupo Editorial, S.A.U.']], '1')
+  ]));
+  assert.deepEqual(b.bne('9791387924713').libro, {
+    titulo: 'God of Malice (Legado de Dioses 1)', autor: '', editorial: 'Penguin Random House Grupo Editorial', anio: '2025', paginas: ''
+  });
+});
+
+test('año del 008 si no hay otro; editoriales S.L.', () => {
+  const b = preparar(sru([
+    '<controlfield tag="008">060418s2005    sp |          ||| ||spa^^</controlfield>',
+    campo('020', [['a', '9788400000001']]),
+    campo('245', [['a', 'Un libro']]),
+    campo('264', [['b', 'Ediciones Tal, S.L.']], '1')
+  ]));
+  const l = b.bne('9788400000001').libro;
+  assert.equal(l.anio, '2005');
+  assert.equal(l.editorial, 'Ediciones Tal');
+});
+
 test('si llegan varios, se queda con el de este ISBN', () => {
   const otro = [campo('020', [['a', '9788400000000']]), campo('245', [['a', 'Otro libro']])];
   assert.equal(preparar(sru(otro, godOfMalice)).bne('9791387924713').libro.titulo, 'God of malice');
