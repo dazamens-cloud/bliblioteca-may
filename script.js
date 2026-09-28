@@ -933,8 +933,10 @@ function sumarPaginas(id, n) {
 function libroDeEntrada(s, e) {
   const encaja = l => mejorEntrada(s.libros, l.titulo, s.nombre) === e;
   const mismoNum = libros.filter(l => l.saga_id === s.id && l.saga_num !== '' && Number(l.saga_num) === Number(e.num));
+  // Por título solo los que aún no tienen número en esta saga: uno que ya es
+  // el 1 no puede aparecer también en la fila 3
   return (mismoNum.length > 1 && mismoNum.find(encaja)) || mismoNum[0] ||
-         libros.find(l => (!l.saga_id || l.saga_id === s.id) && encaja(l));
+         libros.find(l => (!l.saga_id || (l.saga_id === s.id && l.saga_num === '')) && encaja(l));
 }
 
 // Libros de una misma saga con el mismo número: antes, en sagas cuyo nombre va

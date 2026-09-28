@@ -109,3 +109,27 @@ test('mejorEntrada: títulos sin número, gana el más concreto y no el nombre d
   assert.equal(S.mejorEntrada(lista, 'Asesino de brujas. La bruja blanca', 'Asesino de brujas').num, 2);
   assert.equal(S.mejorEntrada(lista, 'Asesino de brujas', 'Asesino de brujas').num, 1);
 });
+
+// Los títulos reales de la saga de May
+const asesinoMay = [
+  { titulo: 'Asesino de brujas - La Bruja Blanca', num: 1 },
+  { titulo: 'Asesino de brujas 2 - Los Hijos del Rey', num: 2 },
+  { titulo: 'Asesino de brujas 3 - Dioses y Monstruos', num: 3 }
+];
+
+test('mejorEntrada con la saga de May: título a secas, número en medio, "Volumen 2"', () => {
+  const e = t => (S.mejorEntrada(asesinoMay, t, 'Asesino de brujas') || {}).num;
+  assert.equal(e('Asesino de brujas'), 1);
+  assert.equal(e('Asesino de brujas. La bruja blanca'), 1);
+  assert.equal(e('Asesino de brujas 2 - Los Hijos del Rey'), 2);
+  assert.equal(e('Asesino de brujas - Volumen 2'), 2);
+  assert.equal(e('Asesino de brujas - Vol. 3. La doncella, la bruja y la arpía'), 3);
+  assert.equal(e('Los hijos del rey'), 2);
+  assert.equal(e('Dioses y monstruos'), 3);
+});
+
+test('numeroSuelto: el número de tomo esté donde esté', () => {
+  assert.equal(S.numeroSuelto('Asesino de brujas 2 - Los Hijos del Rey'), 2);
+  assert.equal(S.numeroSuelto('Asesino de brujas - Volumen 2'), 2);
+  assert.equal(S.numeroSuelto('El Rey de la Ira'), null);
+});
