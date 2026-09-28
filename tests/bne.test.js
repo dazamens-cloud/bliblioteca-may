@@ -3,76 +3,85 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { crearBackend } = require('./gas-simulado.js');
 
-// Registro con el aspecto de los datos abiertos de la BNE (ISBN con guiones)
-const godOfMalice = {
-  id: 'a1234567',
-  isbn: '979-13-87924-71-3',
-  titulo: 'God of malice : un dark romance universitario / Rina Kent',
-  mencion_de_autores: 'Rina Kent ; traducción de Fulana de Tal',
-  autores: 'Kent, Rina (1990-) /**/ Tal, Fulana de',
-  editorial: 'Barcelona : Montena, 2025',
-  fecha_de_publicacion: '2025',
-  extension: '528 p. ; 23 cm'
-};
+const campo = (tag, subs, ind2 = ' ') =>
+  `<datafield tag="${tag}" ind1=" " ind2="${ind2}">` +
+  subs.map(([c, v]) => `<subfield code="${c}">${v}</subfield>`).join('') + '</datafield>';
 
-function preparar(registros) {
+// Respuesta SRU como la del catálogo de la BNE (srw + MARCXML)
+const sru = (...registros) => `<?xml version="1.0" encoding="UTF-8"?>
+<searchRetrieveResponse xmlns="http://www.loc.gov/zing/srw/"><version>1.2</version>
+<numberOfRecords>${registros.length}</numberOfRecords><records>` +
+  registros.map((r, i) => `<record><recordSchema>marcxml</recordSchema><recordPacking>xml</recordPacking><recordData>
+<record xmlns="http://www.loc.gov/MARC21/slim"><leader>00000cam a2200000 i 4500</leader>
+<controlfield tag="001">99100000${i}</controlfield>${r.join('')}</record></recordData>
+<recordPosition>${i + 1}</recordPosition></record>`).join('') + '</records></searchRetrieveResponse>';
+
+const godOfMalice = [
+  campo('020', [['a', '9791387924713'], ['q', '(tapa dura)']]),
+  campo('100', [['a', 'Kent, Rina,'], ['e', 'autor']]),
+  campo('245', [['a', 'God of malice :'], ['b', 'un dark romance universitario /'], ['c', 'Rina Kent ; traducción de Fulana de Tal']]),
+  campo('264', [['a', 'Barcelona :'], ['b', 'Montena,'], ['c', '2025']], '1'),
+  campo('300', [['a', '528 páginas ;'], ['c', '23 cm']]),
+  campo('490', [['a', 'Legado de dioses ;'], ['v', '1']]),
+  campo('700', [['a', 'Tal, Fulana de,'], ['e', 'traductor']])
+];
+
+function preparar(xml, codigo = 200) {
   const b = crearBackend({ PIN_ana: '1234' });
   const clave = b.get({ accion: 'entrar', perfil: 'ana', pin: '1234' }).clave;
   b.urls = [];
-  b.ctx.UrlFetchApp.fetch = url => {
-    b.urls.push(url);
-    const q = decodeURIComponent(url.split('isbn=')[1]).split(' OR ').map(f => f.replace(/^"|"$/g, ''));
-    assert.ok(decodeURIComponent(url).split('isbn=')[1].split(' OR ').every(f => /^".+"$/.test(f)), 'cada forma entre comillas');
-    // La API devuelve los registros cuyo ISBN contiene alguna de las formas
-    const data = registros.filter(r => q.some(f => r.isbn.includes(f)));
-    return { getResponseCode: () => 200, getContentText: () => JSON.stringify({ success: true, data }) };
-  };
+  b.ctx.UrlFetchApp.fetch = url => { b.urls.push(url); return { getResponseCode: () => codigo, getContentText: () => xml }; };
   b.bne = isbn => b.get({ accion: 'bne', isbn, perfil: 'ana', clave });
   return b;
 }
 
-test('encuentra un 979-13 guardado con guiones y limpia los campos', () => {
-  const b = preparar([godOfMalice]);
-  const r = b.bne('9791387924713');
-  assert.equal(r.ok, true);
-  assert.deepEqual(r.libro, {
-    titulo: 'God of malice. un dark romance universitario', autor: 'Rina Kent',
-    editorial: 'Montena', anio: '2025', paginas: 528
+test('God of Malice: título, autor, editorial, año y páginas del MARC', () => {
+  const b = preparar(sru(godOfMalice));
+  assert.deepEqual(b.bne('979-13-87924-71-3').libro, {
+    titulo: 'God of malice', autor: 'Rina Kent', editorial: 'Montena', anio: '2025', paginas: 528
   });
   assert.equal(b.urls.length, 1);
+  assert.ok(b.urls[0].startsWith('https://catalogo.bne.es/view/sru/34BNE_INST?'));
+  assert.ok(decodeURIComponent(b.urls[0]).includes('query=alma.isbn="9791387924713"'));
 });
 
-test('un 978-84 viejo guardado solo con el ISBN de 10 cifras', () => {
-  const b = preparar([{ isbn: '84-7888-445-9', titulo: 'Harry Potter y la piedra filosofal', autores: 'Rowling, J. K., 1965-', editorial: 'Salamandra', fecha_de_publicacion: '1999', extension: '254 p.' }]);
-  const r = b.bne('9788478884452');
-  assert.equal(r.libro.titulo, 'Harry Potter y la piedra filosofal');
-  assert.equal(r.libro.autor, 'J. K. Rowling');
-  assert.equal(r.libro.paginas, 254);
+test('libro antiguo con 260, iniciales y entidades XML', () => {
+  const b = preparar(sru([
+    campo('020', [['a', '84-7888-445-9']]),
+    campo('100', [['a', 'Rowling, J. K.']]),
+    campo('245', [['a', 'Harry Potter y la piedra filosofal /'], ['c', 'J.K. Rowling']]),
+    campo('260', [['a', 'Barcelona :'], ['b', 'Salamandra &amp; Cía,'], ['c', '[1999]']]),
+    campo('300', [['a', '254 p. ;'], ['c', '21 cm']])
+  ]));
+  assert.deepEqual(b.bne('8478884459').libro, {
+    titulo: 'Harry Potter y la piedra filosofal', autor: 'J. K. Rowling', editorial: 'Salamandra & Cía', anio: '1999', paginas: 254
+  });
 });
 
-test('no se queda con otro libro cuyo ISBN solo se parece', () => {
-  const b = preparar([{ ...godOfMalice, isbn: '979-13-87924-71-35' }, { ...godOfMalice, isbn: '979-13-87924-72-1', titulo: 'Otro' }]);
-  // El primero contiene el ISBN entero, así que cuenta; el segundo no
-  assert.equal(b.bne('9791387924713').libro.titulo, 'God of malice. un dark romance universitario');
-  assert.deepEqual(preparar([{ ...godOfMalice, isbn: '979-13-87924-72-1' }]).bne('9791387924713'), { ok: true, libro: null });
+test('manga: número de tomo en 245 $n; sin 100 usa el 700 que no es traductor', () => {
+  const b = preparar(sru([
+    campo('020', [['a', '9788467917885']]),
+    campo('245', [['a', 'Ataque a los titanes.'], ['n', '1 /'], ['c', 'Hajime Isayama']]),
+    campo('264', [['b', 'Norma Editorial'], ['c', '2012']], '1'),
+    campo('700', [['a', 'Pérez, Marc,'], ['e', 'traductor']]),
+    campo('700', [['a', 'Isayama, Hajime'], ['e', 'autor']])
+  ]));
+  const l = b.bne('9788467917885').libro;
+  assert.equal(l.titulo, 'Ataque a los titanes. 1');
+  assert.equal(l.autor, 'Hajime Isayama');
+  assert.equal(l.paginas, '');
 });
 
-test('ISBN no válido o error de la BNE: responde sin romperse', () => {
-  const b = preparar([]);
-  assert.deepEqual(b.bne('123'), { ok: false, error: 'isbn' });
-  b.ctx.UrlFetchApp.fetch = () => ({ getResponseCode: () => 503, getContentText: () => '' });
-  assert.deepEqual(b.bne('9791387924713'), { ok: false, error: 'http 503' });
+test('si llegan varios, se queda con el de este ISBN', () => {
+  const otro = [campo('020', [['a', '9788400000000']]), campo('245', [['a', 'Otro libro']])];
+  assert.equal(preparar(sru(otro, godOfMalice)).bne('9791387924713').libro.titulo, 'God of malice');
+});
+
+test('sin resultados, ISBN no válido o error de la BNE: responde sin romperse', () => {
+  assert.deepEqual(preparar(sru()).bne('9791387924713'), { ok: true, libro: null });
+  assert.deepEqual(preparar('').bne('123'), { ok: false, error: 'isbn' });
+  assert.deepEqual(preparar('', 503).bne('9791387924713'), { ok: false, error: 'http 503' });
+  const b = preparar('');
   b.ctx.UrlFetchApp.fetch = () => { throw new Error('timeout'); };
   assert.deepEqual(b.bne('9791387924713'), { ok: false, error: 'red' });
-});
-
-test('formasIsbn: todos los cortes con guiones y el ISBN de 10', () => {
-  const { ctx } = crearBackend({});
-  const f = ctx.formasIsbn('9788478884452');
-  assert.equal(f.i10, '8478884459');
-  assert.ok(f.todas.includes('978-84-7888-445-2'));
-  assert.ok(f.todas.includes('84-7888-445-9'));
-  assert.equal(ctx.formasIsbn('8478884459').i13, '9788478884452');
-  // Fuera de España solo las formas sin guiones
-  assert.deepEqual([...ctx.formasIsbn('9780747532743').todas], ['9780747532743', '0747532745']);
 });
