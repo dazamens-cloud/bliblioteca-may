@@ -76,6 +76,11 @@ la propiedad del script `RETO_{perfil}`; no hay que crearla a mano.
 Opcional: propiedad del script `GOOGLE_BOOKS_KEY` con una clave de Google Books
 (gratis). Sin ella, la búsqueda usa solo Open Library, que suele bastar.
 
+**Orden de búsqueda por ISBN:** Open Library → Google Books → Biblioteca Nacional de
+España (datos abiertos, sin clave, siempre por Apps Script). La BNE encuentra los libros
+editados en España que las otras no tienen, sobre todo los ISBN nuevos 979-13. No trae
+portada, y las novedades pueden tardar unos meses en aparecer.
+
 ### Pasar la hoja de antes de los perfiles
 
 **Renombrar** (▾ → Cambiar nombre) las pestañas que ya existen, no crear otras:
