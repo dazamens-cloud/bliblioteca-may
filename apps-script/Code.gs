@@ -349,6 +349,15 @@ function libroBne(r) {
   return { titulo: titulo, autor: autor, editorial: editorial, anio: anio, paginas: pag ? Number(pag[1]) : '' };
 }
 
+// Para probar desde el editor: elegir probarBne y pulsar Ejecutar.
+// En el registro sale lo que contesta la BNE y cómo queda el libro.
+function probarBne() {
+  const isbn = '9791387924713';
+  const url = 'https://apidatosabiertos.bne.es/api/mon?isbn=' + encodeURIComponent(formasIsbn(isbn).todas.join(' OR '));
+  Logger.log(UrlFetchApp.fetch(url, { muteHttpExceptions: true }).getContentText().slice(0, 3000));
+  Logger.log(JSON.stringify(bne(isbn)));
+}
+
 // ── UTILIDADES ────────────────────────────────
 
 function json(obj) {
