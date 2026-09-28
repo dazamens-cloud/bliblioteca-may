@@ -37,6 +37,25 @@ function mismoTitulo(a, b) {
   return corto.length >= 10 && largo.includes(corto);
 }
 
+// De los libros de una saga, el que corresponde a este título. Si varios
+// "coinciden" (en "Asesino de brujas" el nombre de la saga va dentro de todos
+// los títulos), gana: el título idéntico; luego el del mismo número; luego
+// uno que no sea solo el nombre de la saga; y si no, el más largo.
+function mejorEntrada(entradas, titulo, nombreSaga) {
+  const t = norm(titulo);
+  const cand = (entradas || []).filter(e => mismoTitulo(e.titulo, titulo));
+  if (cand.length < 2) return cand[0] || null;
+  const exacto = cand.find(e => norm(e.titulo) === t);
+  if (exacto) return exacto;
+  const n = numeroEnTitulo(titulo);
+  const conNum = n !== null && cand.find(e => e.num !== '' && Number(e.num) === n);
+  if (conNum) return conNum;
+  const saga = norm(nombreSaga);
+  const propios = cand.filter(e => norm(e.titulo) !== saga && t.includes(norm(e.titulo)));
+  const lista = propios.length ? propios : cand;
+  return lista.reduce((a, b) => norm(b.titulo).length > norm(a.titulo).length ? b : a);
+}
+
 // Mismo autor si comparten algún apellido/nombre de más de 3 letras
 function mismoAutor(a, b) {
   if (!a || !b) return true; // sin dato no descartamos
@@ -305,5 +324,5 @@ async function descubrirSaga(libro) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { descubrirSaga, norm, mismoTitulo, mismoAutor, nombreBaseSaga, numeroEnTitulo, wdNombre, autorLegible, agruparTomosOL, limpiarTituloOL };
+  module.exports = { descubrirSaga, norm, mismoTitulo, mejorEntrada, mismoAutor, nombreBaseSaga, numeroEnTitulo, wdNombre, autorLegible, agruparTomosOL, limpiarTituloOL };
 }

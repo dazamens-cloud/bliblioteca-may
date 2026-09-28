@@ -112,6 +112,7 @@ function cargarDatos() {
   sagas  = leerLS(lsDatos('sagas'), []).map(normalizarSaga);
   cola   = leerLS(lsDatos('cola'), []);
   reto   = leerLS(lsDatos('reto'), {});
+  repararNumerosSaga();
 }
 
 // La URL del código manda sobre la guardada. Las conexiones de antes de los
@@ -255,6 +256,7 @@ async function descargar() {
     if (!r.ok) throw new Error(r.error);
     libros = r.libros.map(normalizarLibro);
     sagas  = r.sagas.map(normalizarSaga);
+    repararNumerosSaga();
     if (r.reto) { reto = r.reto; guardarLS(lsDatos('reto'), reto); }
     guardarLocal();
     config.error = '';
@@ -917,9 +919,34 @@ function sumarPaginas(id, n) {
 
 // ── SAGAS ───────────────────────────────────
 
+// El libro de una fila de la saga: por número y, si no, por título. Si hay
+// varios con el mismo número (datos de antes del arreglo), el que encaje por título.
 function libroDeEntrada(s, e) {
-  return libros.find(l => l.saga_id === s.id && l.saga_num !== '' && Number(l.saga_num) === Number(e.num)) ||
-         libros.find(l => (!l.saga_id || l.saga_id === s.id) && mismoTitulo(l.titulo, e.titulo));
+  const encaja = l => mejorEntrada(s.libros, l.titulo, s.nombre) === e;
+  const mismoNum = libros.filter(l => l.saga_id === s.id && l.saga_num !== '' && Number(l.saga_num) === Number(e.num));
+  return (mismoNum.length > 1 && mismoNum.find(encaja)) || mismoNum[0] ||
+         libros.find(l => (!l.saga_id || l.saga_id === s.id) && encaja(l));
+}
+
+// Libros de una misma saga con el mismo número: antes, en sagas cuyo nombre va
+// dentro de todos los títulos (Asesino de brujas), todos acababan con el del
+// primero. Se recoloca cada uno en su número si ese número está libre.
+function repararNumerosSaga() {
+  let cambios = false;
+  for (const s of sagas) {
+    const suyos = libros.filter(l => l.saga_id === s.id && l.saga_num !== '');
+    for (const l of suyos) {
+      if (suyos.filter(x => Number(x.saga_num) === Number(l.saga_num)).length < 2) continue;
+      const e = mejorEntrada(s.libros, l.titulo, s.nombre);
+      if (!e || e.num === '' || Number(e.num) === Number(l.saga_num)) continue;
+      if (suyos.some(x => x !== l && Number(x.saga_num) === Number(e.num))) continue;
+      l.saga_num = Number(e.num);
+      l.actualizado = ahora();
+      encolar({ accion: 'guardarLibro', libro: l });
+      cambios = true;
+    }
+  }
+  if (cambios) guardarLocal();
 }
 
 function progresoSaga(s) {
@@ -973,7 +1000,7 @@ function vincular(l, s, num) {
 async function comprobarSaga(l, manual) {
   // 1. ¿Encaja en una saga que ya tengo guardada?
   for (const s of sagas) {
-    const e = s.libros.find(e => mismoTitulo(e.titulo, l.titulo));
+    const e = mejorEntrada(s.libros, l.titulo, s.nombre);
     if (e) {
       vincular(l, s, e.num);
       guardarLibro(l);
@@ -1010,7 +1037,7 @@ function abrirEditorSaga(saga, libro) {
     openlibrary: 'Lista aproximada de Open Library: desmarca lo que no sea de la saga y corrige el orden si hace falta.',
     manual:      'Escribe los libros de la saga en orden.'
   };
-  const marcado = libro ? saga.libros.findIndex(e => mismoTitulo(e.titulo, libro.titulo)) : -1;
+  const marcado = libro ? saga.libros.indexOf(mejorEntrada(saga.libros, libro.titulo, saga.nombre)) : -1;
 
   const fila = (e, i) => `
     <div class="fila-ed">
@@ -1066,7 +1093,7 @@ function abrirEditorSaga(saga, libro) {
     if (libro && numEste !== null) { vincular(libro, s, numEste); guardarLibro(libro); }
     // Enlazar otros libros que ya tuviera de esta saga
     libros.filter(l => !l.saga_id).forEach(l => {
-      const e = s.libros.find(e => mismoTitulo(e.titulo, l.titulo));
+      const e = mejorEntrada(s.libros, l.titulo, s.nombre);
       if (e) { vincular(l, s, e.num); guardarLibro(l); }
     });
 
@@ -1286,7 +1313,7 @@ function abrirPreview(d, aviso) {
   async function buscarSaga() {
     if (!d.titulo) { sel.estado = 'hecho'; pintarSaga(); return; }
     for (const s of sagas) {
-      const e = s.libros.find(e => mismoTitulo(e.titulo, d.titulo));
+      const e = mejorEntrada(s.libros, d.titulo, s.nombre);
       if (e) { Object.assign(sel, { estado: 'hecho', sagaId: s.id, num: e.num }); pintarSaga(); return; }
     }
     let propuesta = null;
