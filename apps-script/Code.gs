@@ -16,6 +16,9 @@
 // RETO: la meta de libros del año de cada perfil va en la propiedad
 // RETO_ana (la escribe la app; no hace falta tocarla a mano).
 //
+// BÚSQUEDA: si Open Library y Google Books no conocen un ISBN, la app
+// pregunta a la Biblioteca Nacional por aquí (accion=bne). No necesita clave.
+//
 // ⚠️ Al cambiar este código: Implementar → NUEVA implementación.
 // Redesplegar la existente no sirve el código nuevo (ver README).
 // =============================================
@@ -65,6 +68,7 @@ function doGet(e) {
     case 'ping':        return json({ ok: true });
     case 'todo':        return json({ ok: true, libros: leer('LIBROS', p.perfil), sagas: leer('SAGAS', p.perfil), reto: leerReto(p.perfil) });
     case 'googleBooks': return json(googleBooks(p.q));
+    case 'bne':         return json(bne(p.isbn));
     default:            return json({ ok: false, error: 'accion desconocida' });
   }
 }
@@ -236,6 +240,113 @@ function googleBooks(q) {
   const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) return { ok: false, error: 'http ' + res.getResponseCode() };
   return { ok: true, datos: JSON.parse(res.getContentText()) };
+}
+
+// ── BIBLIOTECA NACIONAL (libros españoles: 978-84 y 979-13) ──
+// API de datos abiertos de la BNE, sin clave. Recoge lo que entra por
+// depósito legal, así que tiene casi todo lo editado en España (con
+// unos meses de retraso para las novedades).
+
+function bne(isbn) {
+  isbn = String(isbn || '').replace(/[^0-9Xx]/g, '').toUpperCase();
+  if (!/^(\d{13}|\d{9}[\dX])$/.test(isbn)) return { ok: false, error: 'isbn' };
+  const formas = formasIsbn(isbn);
+  const url = 'https://apidatosabiertos.bne.es/api/mon?isbn=' + encodeURIComponent(formas.todas.join(' OR '));
+  let res;
+  try { res = UrlFetchApp.fetch(url, { muteHttpExceptions: true }); }
+  catch (e) { return { ok: false, error: 'red' }; }
+  if (res.getResponseCode() !== 200) return { ok: false, error: 'http ' + res.getResponseCode() };
+  let d;
+  try { d = JSON.parse(res.getContentText()); } catch (e) { return { ok: false, error: 'respuesta' }; }
+  // La API busca "contiene": nos quedamos solo con el registro de este ISBN
+  const reg = (d.data || []).find(function (r) {
+    const cifras = textoBne(r.isbn).replace(/[^0-9Xx]/g, '').toUpperCase();
+    return cifras.indexOf(formas.i13) >= 0 || (formas.i10 && cifras.indexOf(formas.i10) >= 0);
+  });
+  if (!reg) return { ok: true, libro: null };
+  return { ok: true, libro: libroBne(reg) };
+}
+
+// La BNE guarda el ISBN con guiones (979-13-87924-71-3) y dónde van depende
+// de la editorial, así que se prueban todos los cortes posibles, más las
+// formas sin guiones y el ISBN de 10 cifras de los libros antiguos.
+function formasIsbn(isbn) {
+  let i13 = isbn, i10 = '';
+  if (isbn.length === 10) {
+    i10 = isbn;
+    const base = '978' + isbn.slice(0, 9);
+    i13 = base + control13(base);
+  } else if (isbn.indexOf('978') === 0) {
+    const base = isbn.slice(3, 12);
+    i10 = base + control10(base);
+  }
+  const todas = [i13];
+  if (i10) todas.push(i10);
+  const grupo = i13.slice(3, 5);                       // 84 en 978, 13 en 979
+  if (i13.slice(0, 5) === '97884' || i13.slice(0, 5) === '97913') {
+    const resto = i13.slice(5, 12);
+    for (let n = 1; n < resto.length; n++) {
+      const medio = resto.slice(0, n) + '-' + resto.slice(n);
+      todas.push(i13.slice(0, 3) + '-' + grupo + '-' + medio + '-' + i13[12]);
+      if (i10) todas.push(grupo + '-' + medio + '-' + i10[9]);
+    }
+  }
+  return { i13: i13, i10: i10, todas: todas };
+}
+
+function control13(doce) {
+  let t = 0;
+  for (let i = 0; i < 12; i++) t += Number(doce[i]) * (i % 2 ? 3 : 1);
+  return String((10 - t % 10) % 10);
+}
+
+function control10(nueve) {
+  let t = 0;
+  for (let i = 0; i < 9; i++) t += Number(nueve[i]) * (10 - i);
+  const c = (11 - t % 11) % 11;
+  return c === 10 ? 'X' : String(c);
+}
+
+// Los campos pueden traer marcas MARC (|a, |b), varios valores separados
+// por /**/ o venir como lista: se deja todo en texto plano.
+function textoBne(v) {
+  if (v === null || v === undefined) return '';
+  if (Array.isArray(v)) v = v.join(' /**/ ');
+  return String(v).replace(/\|[a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function primeroBne(v) { return textoBne(v).split('/**/')[0].trim(); }
+
+// Quita corchetes y la puntuación de los extremos, pero no el punto de una
+// inicial ("Rowling, J. K.")
+function limpiarBne(s) {
+  s = String(s || '').replace(/[\[\]]/g, '').replace(/^[\s.,:;\/]+|[\s,:;\/]+$/g, '');
+  return /(^|[\s.])[A-ZÁÉÍÓÚÑ]\.$/.test(s) ? s : s.replace(/[\s.]+$/, '');
+}
+
+function libroBne(r) {
+  // "God of malice : un dark romance universitario / Rina Kent" → título. subtítulo
+  const titulo = limpiarBne(primeroBne(r.titulo).split(' / ')[0].replace(/\s+:\s+/g, '. '));
+
+  // Autor: la mención de la portada ("Rina Kent ; traducción de…") o, si no
+  // hay, el primero de autores en forma "Kent, Rina (1990-)".
+  let autor = limpiarBne(primeroBne(r.mencion_de_autores).split(';')[0]);
+  if (!autor) {
+    const a = limpiarBne(primeroBne(r.autores).replace(/\(.*?\)/g, '').replace(/,?\s*\d{4}-?(\d{4})?/g, ''));
+    const partes = a.split(',').map(function (x) { return x.trim(); }).filter(String);
+    autor = partes.length >= 2 ? partes[1] + ' ' + partes[0] : a;
+  }
+
+  // Editorial: puede venir como "Barcelona : Montena, 2025"
+  let editorial = primeroBne(r.editorial);
+  if (editorial.indexOf(' : ') >= 0) editorial = editorial.split(' : ')[1];
+  editorial = limpiarBne(editorial.split(',')[0]);
+
+  const anio = (textoBne(r.fecha_de_publicacion).match(/\d{4}/) || [''])[0];
+  const ext = textoBne(r.extension);
+  const pag = ext.match(/(\d+)\s*p/) || ext.match(/(\d+)/);
+
+  return { titulo: titulo, autor: autor, editorial: editorial, anio: anio, paginas: pag ? Number(pag[1]) : '' };
 }
 
 // ── UTILIDADES ────────────────────────────────

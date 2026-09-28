@@ -193,9 +193,9 @@ function guardarMeta(anio, meta) {
 const conectado = () => !!(config.url && config.perfil && config.clave);
 const nombrePerfil = id => id ? id[0].toUpperCase() + id.slice(1) : '';
 
-async function apiGet(params) {
+async function apiGet(params, ms = 20000) {
   const q = new URLSearchParams({ ...params, perfil: config.perfil, clave: config.clave });
-  const r = await (await fetchT(config.url + '?' + q, {}, 20000)).json();
+  const r = await (await fetchT(config.url + '?' + q, {}, ms)).json();
   if (r && r.error === 'clave') sesionCaducada();
   return r;
 }
@@ -435,6 +435,8 @@ async function buscarPorIsbn(isbn) {
   const gb = await googleBooks('isbn:' + isbn);
   $('#resultados').innerHTML = '';
   if (gb.length) { abrirPreview({ ...gb[0], isbn }); return; }
+  const bn = await bne(isbn);
+  if (bn) { abrirPreview({ ...bn, isbn }); return; }
   abrirPreview({ isbn }, 'No lo encuentro en ninguna base de datos. Rellénalo a mano.');
 }
 
@@ -469,6 +471,21 @@ async function buscarPorTexto(q) {
         <p>${esc(x.autor)}${x.anio ? ' · ' + esc(x.anio) : ''}</p>
       </div>
     </article>`).join('');
+}
+
+// Biblioteca Nacional de España, por la hoja: tiene casi todo lo editado en
+// España, también los ISBN nuevos 979-13 que Open Library y Google Books no
+// conocen. No trae portada. Un Code.gs antiguo contesta "accion desconocida".
+async function bne(isbn) {
+  if (!conectado()) return null;
+  try {
+    $('#resultados').innerHTML = '<p class="cargando">Buscando en la Biblioteca Nacional…</p>';
+    const r = await apiGet({ accion: 'bne', isbn }, 30000);
+    return r && r.ok && r.libro && r.libro.titulo ? r.libro : null;
+  } catch (e) {
+    console.warn('BNE:', e.message);
+    return null;
+  } finally { $('#resultados').innerHTML = ''; }
 }
 
 // Google Books: por la hoja (con clave propia) si está conectada; si no, directo
