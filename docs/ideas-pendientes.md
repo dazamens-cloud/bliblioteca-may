@@ -27,6 +27,31 @@ escanear» y hay que escribir el ISBN.
   inicio» y entrar con perfil. Sin instalar y sin perfil, Safari puede borrar los libros
   guardados en el móvil si la web no se abre en unos días.
 
+## Accesibilidad y carga (de la revisión de una auditoría externa)
+
+Nada urgente: no cambia cómo se ve ni cómo funciona la app. Lo de seguridad de esa
+auditoría ya estaba cubierto: `esc()` en todo lo que se pinta con `innerHTML`,
+sesión firmada con el PIN en cada petición y bloqueo tras 5 fallos.
+
+- **Iconos en silencio:** poner `aria-hidden="true"` a los iconos (`<span class="ic">`
+  del HTML y la función `ic()` de `script.js`). Hoy el lector de pantalla lee la
+  palabra del icono («barcode_scanner Escanear»).
+- **Barra de abajo:** marcar la pantalla activa con `aria-current="page"` (no
+  `role="tablist"`: es navegación).
+- **Botón de sincronización:** `aria-label` además del `title` que ya pone
+  `pintarSync()`.
+- **Color de la barra del navegador en pergamino:** fijar `theme-color` a `#efe4cc`
+  en el script del `<head>`, antes de pintar (hoy lo pone `aplicarTema()` un instante
+  después).
+- **Fuentes:** quitar de la URL de Google Fonts los estilos que no se usan
+  (Cinzel 500 y la cursiva de EB Garamond).
+- **Opcional:** `role="dialog"` y `aria-modal` en la ficha, solo si a la vez se
+  controla el foco del teclado (llevarlo a la ficha al abrirla y devolverlo al cerrarla).
+
+No aplicar: `aria-pressed` en «A mano» (es un botón de acción, no se queda pulsado),
+`role="tab"` junto a `aria-pressed`, ni `aria-live` en el aviso (ya lo da
+`role="status"`).
+
 ## Aspecto en el PC
 
 La cabecera y la barra de abajo ocupan todo el ancho mientras el contenido va centrado
