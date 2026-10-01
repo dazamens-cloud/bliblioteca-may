@@ -529,33 +529,65 @@ async function googleBooks(q) {
   }
 }
 
-// ── ESCÁNER (BarcodeDetector: Chrome en Android) ──
+// ── ESCÁNER ─────────────────────────────────
+// Chrome en Android trae BarcodeDetector. Safari (iPhone) no: ahí se carga, la
+// primera vez que se escanea, una copia que lee los códigos con ZXing
+// (barcode-detector, ~60 KB + 1 MB de WebAssembly; luego queda en caché).
+
+const LECTOR_ZXING = 'https://cdn.jsdelivr.net/npm/barcode-detector@3.2.2/dist/es/ponyfill.js';
+let claseDetector = null;
+
+async function obtenerDetector() {
+  if (!claseDetector) {
+    if ('BarcodeDetector' in window) {
+      const formatos = await BarcodeDetector.getSupportedFormats().catch(() => []);
+      if (formatos.includes('ean_13')) claseDetector = BarcodeDetector;
+    }
+    if (!claseDetector) claseDetector = (await import(LECTOR_ZXING)).BarcodeDetector;
+  }
+  return new claseDetector({ formats: ['ean_13'] });
+}
 
 async function iniciarEscaner() {
-  if (!('BarcodeDetector' in window)) {
-    toast('Este navegador no puede escanear. Escribe el ISBN (los números bajo el código de barras).', { ms: 6000 });
+  if (escaner) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast('Este navegador no deja usar la cámara. Escribe el ISBN (los números bajo el código de barras).', { ms: 6000 });
+    $('#inputIsbn').focus();
+    return;
+  }
+  let detector;
+  try {
+    detector = await obtenerDetector();
+  } catch (e) {
+    console.warn('Lector de códigos:', e);
+    toast('No se pudo cargar el lector de códigos. Comprueba la conexión o escribe el ISBN.', { ms: 6000 });
     $('#inputIsbn').focus();
     return;
   }
   try {
-    const detector = new BarcodeDetector({ formats: ['ean_13'] });
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
     const video = $('#video');
     video.srcObject = stream;
     await video.play();
     $('#escaner').hidden = false;
-    escaner = { stream, timer: setInterval(async () => {
+    const yo = escaner = { stream, timer: 0 };
+    // Un fotograma cada vez: con ZXing leer uno puede tardar más de 250 ms
+    const mirar = async () => {
+      if (escaner !== yo) return;
       try {
         const codigos = await detector.detect(video);
         const isbn = codigos.map(c => c.rawValue).find(v => /^97[89]\d{10}$/.test(v));
-        if (isbn) {
+        if (isbn && escaner === yo) {
           pararEscaner();
           if (navigator.vibrate) navigator.vibrate(80);
           $('#inputIsbn').value = isbn;
           buscarPorIsbn(isbn);
+          return;
         }
       } catch (e) { /* fotograma sin código */ }
-    }, 250) };
+      if (escaner === yo) yo.timer = setTimeout(mirar, 250);
+    };
+    mirar();
   } catch (e) {
     toast('No se pudo abrir la cámara: ' + esc(e.message), { ms: 5000 });
   }
@@ -563,7 +595,7 @@ async function iniciarEscaner() {
 
 function pararEscaner() {
   if (!escaner) return;
-  clearInterval(escaner.timer);
+  clearTimeout(escaner.timer);
   escaner.stream.getTracks().forEach(t => t.stop());
   escaner = null;
   $('#escaner').hidden = true;

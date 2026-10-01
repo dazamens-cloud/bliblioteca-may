@@ -15,17 +15,16 @@ Cosas que han salido hablando y se han dejado para más adelante. Ninguna está 
 
 ## iPhone (Safari)
 
-La app funciona en iPhone salvo el **escáner**: usa `BarcodeDetector`, que Chrome en
-Android tiene y Safari no trae activado. En iPhone sale «Este navegador no puede
-escanear» y hay que escribir el ISBN.
+**Hecho (octubre 2026):** el escáner ya no depende de `BarcodeDetector`, que Safari no
+trae. Si falta, se carga `barcode-detector` (ZXing en WebAssembly) desde jsDelivr la
+primera vez que se escanea, y el service worker lo guarda. En Android se sigue usando
+el del navegador. Probado en Chromium sin lector propio y con una cámara falsa.
 
-- **Arreglo:** si no hay `BarcodeDetector`, leer el código con una librería
-  (por ejemplo ZXing) desde el vídeo de la cámara. En Android se sigue usando el del
-  navegador, que es más rápido.
-- **Probarlo en un iPhone de verdad:** aquí no hay Safari para probar.
-- **Mientras tanto:** instalarla desde Safari → Compartir → «Añadir a pantalla de
-  inicio» y entrar con perfil. Sin instalar y sin perfil, Safari puede borrar los libros
-  guardados en el móvil si la web no se abre en unos días.
+- **Falta probarlo en un iPhone de verdad:** instalar desde Safari → Compartir →
+  «Añadir a pantalla de inicio», entrar con perfil y escanear un libro. Mirar que la
+  cámara se abre dentro de la app y que lee el código.
+- Sin instalar y sin perfil, Safari puede borrar los libros guardados en el móvil si la
+  web no se abre en unos días.
 
 ## Accesibilidad y carga (de la revisión de una auditoría externa)
 

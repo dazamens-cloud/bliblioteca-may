@@ -7,7 +7,7 @@
 //   navegador puede servir HTML nuevo con JS viejo durante 10 minutos.
 //   No hace falta subir versión a mano.
 //
-// Fuentes e iconos: cache-first (no cambian).
+// Fuentes, iconos y el lector de códigos de jsDelivr: cache-first (no cambian).
 // Las portadas NO se cachean aquí: llegan como respuesta opaca y Chrome
 // cuenta cada una como ~7 MB de cuota. Las guarda la caché HTTP normal.
 // APIs (Open Library, Wikidata, Apps Script): no se tocan.
@@ -38,6 +38,9 @@ self.addEventListener('fetch', e => {
   const estatico =
     url.hostname === 'fonts.googleapis.com' ||
     url.hostname === 'fonts.gstatic.com' ||
+    url.hostname === 'cdn.jsdelivr.net' ||       // lector de códigos (iPhone),
+    url.hostname === 'fastly.jsdelivr.net' ||    // con versión fija en la URL
+
     (url.origin === location.origin && url.pathname.includes('/icons/'));
 
   if (estatico) { e.respondWith(cacheFirst(req)); return; }
