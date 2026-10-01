@@ -128,5 +128,6 @@ cuesta lo mismo con 10 libros que con 500. Se para con una ficha abierta y con
 python -m http.server 8642
 ```
 
-y abrir `http://localhost:8642`. El escáner necesita Chrome en Android. En el PC,
-escribe el ISBN a mano.
+y abrir `http://localhost:8642`. El escáner usa el lector de códigos del navegador
+(Chrome en Android) y, si no lo hay (Safari en iPhone, Chrome en el PC), carga
+ZXing desde jsDelivr la primera vez. Necesita cámara; si no, escribe el ISBN a mano.
