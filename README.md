@@ -59,6 +59,10 @@ pierda el primer libro o saga que se guarde (la fila 1 se lee como títulos).
 **Añadir a alguien:** otra propiedad `PIN_nombre`. No hay que tocar el código ni
 redesplegar. **Cambiar un PIN** cierra la sesión de ese perfil en todos los móviles.
 
+**Nombre para mostrar (opcional):** `NOMBRE_isabelbosch` = `Isabel Bosch`. En el valor
+valen espacios, tildes y mayúsculas; sin esta propiedad se ve el id con mayúscula
+(«Isabelbosch»). Tampoco hace falta redesplegar para cambiarlo.
+
 Los PIN **no** están en el repositorio: viven en las propiedades del script, que solo
 ve el dueño del Apps Script. Tras 5 PIN incorrectos seguidos, el perfil se bloquea
 15 minutos. Todo se guarda en la hoja de quien creó el Apps Script; los demás no la
