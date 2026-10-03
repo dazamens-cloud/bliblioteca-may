@@ -9,7 +9,7 @@
 // dispositivo la tiene sin configurar nada. Cada persona entra en su perfil
 // con su PIN (los PIN están en el servidor, no aquí). Vacía = se pega en Ajustes.
 // ⚠️ Cada implementación nueva de Apps Script da otra URL: cambiarla aquí.
-const URL_SCRIPT = 'https://script.google.com/macros/s/AKfycbzjJ1fesKiLWNJ_wqbMVu7lTL8RI93GcChpLaXa87HUVRjPJu5ySOLC2pvlEmckZzhU/exec';
+const URL_SCRIPT = 'https://script.google.com/macros/s/AKfycbz-QOSxfnXV6QByZWUnC5zHt35bX_aZWbLbNgt1ptI77gmxErVcObQH_NsEabPmRbKm/exec';
 
 const LS = { config: 'mb_config', filtro: 'mb_filtro', tema: 'mb_tema' };
 // Libros, sagas y cola van por perfil: mb_ana_libros. Sin perfil: mb_libros.
