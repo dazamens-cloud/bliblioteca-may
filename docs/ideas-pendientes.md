@@ -20,9 +20,8 @@ trae. Si falta, se carga `barcode-detector` (ZXing en WebAssembly) desde jsDeliv
 primera vez que se escanea, y el service worker lo guarda. En Android se sigue usando
 el del navegador. Probado en Chromium sin lector propio y con una cámara falsa.
 
-- **Falta probarlo en un iPhone de verdad:** instalar desde Safari → Compartir →
-  «Añadir a pantalla de inicio», entrar con perfil y escanear un libro. Mirar que la
-  cámara se abre dentro de la app y que lee el código.
+- **Probado en un iPhone de verdad (octubre 2026):** la cámara se abre dentro de la app
+  y lee el código de barras.
 - Sin instalar y sin perfil, Safari puede borrar los libros guardados en el móvil si la
   web no se abre en unos días.
 
