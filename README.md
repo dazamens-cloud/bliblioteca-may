@@ -41,7 +41,8 @@ sus propias pestañas (`LIBROS_ana`, `SAGAS_ana`), y entra con su **PIN**.
 2. Pegar `apps-script/Code.gs` y guardar.
 3. Crear los perfiles: ⚙️ **Configuración del proyecto → Propiedades del script** →
    añadir `PIN_ana` = `5678`, `PIN_luis` = `2468`… El nombre, en minúsculas y sin
-   espacios ni tildes, es el que sale en la app (`ana` → "Ana").
+   espacios ni tildes, es el que sale en la app (`ana` → "Ana"). Más abajo:
+   [cómo añadir a alguien y ponerle un nombre con espacios y tildes](#añadir-a-alguien-y-ponerle-nombre).
 4. Ejecutar **`setup`**. Genera el secreto con el que se firman las sesiones (`TOKEN`)
    y en el registro debe salir `Perfiles: ana, luis`.
 5. **Implementar → Nueva implementación → Aplicación web**. Ejecutar como: yo. Acceso:
@@ -56,12 +57,32 @@ sus propias pestañas (`LIBROS_ana`, `SAGAS_ana`), y entra con su **PIN**.
 la primera vez que alguien entra. Una pestaña creada a mano sin esa fila hace que se
 pierda el primer libro o saga que se guarde (la fila 1 se lee como títulos).
 
-**Añadir a alguien:** otra propiedad `PIN_nombre`. No hay que tocar el código ni
-redesplegar. **Cambiar un PIN** cierra la sesión de ese perfil en todos los móviles.
+### Añadir a alguien y ponerle nombre
 
-**Nombre para mostrar (opcional):** `NOMBRE_isabelbosch` = `Isabel Bosch`. En el valor
-valen espacios, tildes y mayúsculas; sin esta propiedad se ve el id con mayúscula
-(«Isabelbosch»). Tampoco hace falta redesplegar para cambiarlo.
+En ⚙️ **Configuración del proyecto → Propiedades del script → Editar propiedades de
+script → Añadir propiedad de script**, dos propiedades por persona:
+
+| Propiedad | Valor | Para qué |
+|---|---|---|
+| `PIN_isabelbosch` | `1234` | Su perfil y su PIN para entrar |
+| `NOMBRE_isabelbosch` | `Isabel Bosch` | Opcional: el nombre que se ve en la app |
+
+- **El nombre de la propiedad** (lo que va detrás de `PIN_` y `NOMBRE_`) es el id del
+  perfil: **todo en minúsculas, solo letras de la a a la z y números, sin espacios,
+  tildes, ñ ni guiones**. Si no cumple, el perfil no sale en la app. Tiene que ser el
+  mismo en las dos propiedades, y es también el de sus pestañas (`LIBROS_isabelbosch`).
+
+  | ✅ Bien | ❌ No sale |
+  |---|---|
+  | `PIN_isabelbosch` | `PIN_isabel bosch` (espacio), `PIN_Isabel` (mayúscula), `PIN_lucía` (tilde) |
+
+- **En el valor de `NOMBRE_`** sí valen espacios, tildes, ñ y mayúsculas: `Isita de León`.
+  Sin `NOMBRE_`, la app enseña el id con mayúscula («Isabelbosch»).
+- **No hace falta tocar el código ni hacer otra implementación**, ni para añadir a
+  alguien ni para cambiar su nombre. Basta con guardar y volver a abrir la app.
+- `NOMBRE_` no tiene nada que ver con el PIN: añadirlo o cambiarlo no cierra la sesión
+  de nadie. **Cambiar el valor de un `PIN_`** sí cierra la sesión de ese perfil en
+  todos los móviles.
 
 Los PIN **no** están en el repositorio: viven en las propiedades del script, que solo
 ve el dueño del Apps Script. Tras 5 PIN incorrectos seguidos, el perfil se bloquea
