@@ -48,3 +48,14 @@ test('las propiedades RETO_ no aparecen como perfiles', () => {
   b.post({ accion: 'guardarReto', anio: '2026', meta: 20, ...b.ana });
   assert.deepEqual(b.get({ accion: 'perfiles' }).perfiles, ['ana', 'luis']);
 });
+
+test('perfiles devuelve los nombres para mostrar (NOMBRE_) y todo el del perfil', () => {
+  const b = crearBackend({ PIN_ana: '1234', PIN_isabelbosch: '1', NOMBRE_isabelbosch: ' Isabel Bosch ', NOMBRE_fantasma: 'Sin PIN' });
+  const r = b.get({ accion: 'perfiles' });
+  assert.deepEqual(r.perfiles, ['ana', 'isabelbosch']);
+  assert.deepEqual(r.nombres, { isabelbosch: 'Isabel Bosch' });
+  const clave = b.get({ accion: 'entrar', perfil: 'isabelbosch', pin: '1' }).clave;
+  assert.equal(b.get({ accion: 'todo', perfil: 'isabelbosch', clave }).nombre, 'Isabel Bosch');
+  const claveAna = b.get({ accion: 'entrar', perfil: 'ana', pin: '1234' }).clave;
+  assert.equal(b.get({ accion: 'todo', perfil: 'ana', clave: claveAna }).nombre, '');
+});

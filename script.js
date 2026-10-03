@@ -11,7 +11,7 @@
 // ⚠️ Cada implementación nueva de Apps Script da otra URL: cambiarla aquí.
 const URL_SCRIPT = 'https://script.google.com/macros/s/AKfycbz-QOSxfnXV6QByZWUnC5zHt35bX_aZWbLbNgt1ptI77gmxErVcObQH_NsEabPmRbKm/exec';
 
-const LS = { config: 'mb_config', filtro: 'mb_filtro', tema: 'mb_tema' };
+const LS = { config: 'mb_config', filtro: 'mb_filtro', tema: 'mb_tema', nombres: 'mb_nombres' };
 // Libros, sagas y cola van por perfil: mb_ana_libros. Sin perfil: mb_libros.
 const lsDatos = (k, perfil = config.perfil) => 'mb_' + (perfil ? perfil + '_' : '') + k;
 
@@ -192,7 +192,14 @@ function guardarMeta(anio, meta) {
 // ── SINCRONIZACIÓN CON GOOGLE SHEETS ────────
 
 const conectado = () => !!(config.url && config.perfil && config.clave);
-const nombrePerfil = id => id ? id[0].toUpperCase() + id.slice(1) : '';
+// Nombre para mostrar: el de la propiedad NOMBRE_ del Apps Script si lo hay
+// (se guarda en mb_nombres); si no, el id con mayúscula
+let nombres = leerLS(LS.nombres, {});
+const nombrePerfil = id => !id ? '' : nombres[id] || id[0].toUpperCase() + id.slice(1);
+function guardarNombres(nuevos) {
+  nombres = nuevos;
+  guardarLS(LS.nombres, nombres);
+}
 
 async function apiGet(params, ms = 20000) {
   const q = new URLSearchParams({ ...params, perfil: config.perfil, clave: config.clave });
@@ -257,6 +264,12 @@ async function descargar() {
     libros = r.libros.map(normalizarLibro);
     sagas  = r.sagas.map(normalizarSaga);
     repararNumerosSaga();
+    // Un Code.gs anterior a los nombres no manda "nombre": se deja el que hubiera
+    if ('nombre' in r) {
+      const n = { ...nombres };
+      if (r.nombre) n[config.perfil] = r.nombre; else delete n[config.perfil];
+      guardarNombres(n);
+    }
     if (r.reto) { reto = r.reto; guardarLS(lsDatos('reto'), reto); }
     guardarLocal();
     config.error = '';
@@ -288,6 +301,7 @@ async function cargarPerfiles() {
   try {
     const r = await (await fetchT(url + '?accion=perfiles', {}, 20000)).json();
     if (!r.ok) throw new Error(r.error);
+    if (r.nombres) guardarNombres(r.nombres);
     sel.innerHTML = r.perfiles.length
       ? '<option value="">Elige tu perfil</option>' +
         r.perfiles.map(p => `<option value="${esc(p)}">${esc(nombrePerfil(p))}</option>`).join('')

@@ -13,6 +13,9 @@
 // tocar el código ni redesplegar. Cambiar el PIN cierra su sesión en
 // todos los móviles.
 //
+// NOMBRE (opcional): NOMBRE_ana = Ana María es el nombre que muestra la app
+// (con espacios, tildes…). Sin él se ve el id con mayúscula: «Ana».
+//
 // RETO: la meta de libros del año de cada perfil va en la propiedad
 // RETO_ana (la escribe la app; no hace falta tocarla a mano).
 //
@@ -60,14 +63,14 @@ function setup() {
 function doGet(e) {
   const p = e.parameter || {};
   switch (p.accion) {
-    case 'perfiles': return json({ ok: true, perfiles: listarPerfiles() });
+    case 'perfiles': return json({ ok: true, perfiles: listarPerfiles(), nombres: nombresPerfiles() });
     case 'entrar':   return json(entrar(p.perfil, p.pin));
   }
   if (!sesionValida(p.perfil, p.clave)) return json({ ok: false, error: 'clave' });
 
   switch (p.accion) {
     case 'ping':        return json({ ok: true });
-    case 'todo':        return json({ ok: true, libros: leer('LIBROS', p.perfil), sagas: leer('SAGAS', p.perfil), reto: leerReto(p.perfil) });
+    case 'todo':        return json({ ok: true, libros: leer('LIBROS', p.perfil), sagas: leer('SAGAS', p.perfil), reto: leerReto(p.perfil), nombre: nombreDe(p.perfil) });
     case 'googleBooks': return json(googleBooks(p.q));
     case 'bne':         return json(bne(p.isbn));
     default:            return json({ ok: false, error: 'accion desconocida' });
@@ -111,6 +114,21 @@ function listarPerfiles() {
     .filter(function (k) { return /^PIN_[a-z0-9]+$/.test(k); })
     .map(function (k) { return k.slice(4); })
     .sort();
+}
+
+// Nombres para mostrar de los perfiles que existen: { ana: 'Ana María' }
+function nombresPerfiles() {
+  const nombres = {};
+  listarPerfiles().forEach(function (id) {
+    const n = nombreDe(id);
+    if (n) nombres[id] = n;
+  });
+  return nombres;
+}
+
+function nombreDe(perfil) {
+  if (!/^[a-z0-9]+$/.test(String(perfil || ''))) return '';
+  return String(PropertiesService.getScriptProperties().getProperty('NOMBRE_' + perfil) || '').trim().slice(0, 40);
 }
 
 function pinDe(perfil) {
