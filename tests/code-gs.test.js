@@ -59,3 +59,44 @@ test('perfiles devuelve los nombres para mostrar (NOMBRE_) y todo el del perfil'
   const claveAna = b.get({ accion: 'entrar', perfil: 'ana', pin: '1234' }).clave;
   assert.equal(b.get({ accion: 'todo', perfil: 'ana', clave: claveAna }).nombre, '');
 });
+
+// Retos de todos: solo el número de leídos del año y la meta
+function conLibros() {
+  const b = crearBackend({ PIN_ana: '1', PIN_luis: '2', PIN_eva: '3', NOMBRE_luis: 'Luis Gómez' });
+  const k = {};
+  for (const [p, pin] of [['ana', '1'], ['luis', '2'], ['eva', '3']]) k[p] = { perfil: p, clave: b.get({ accion: 'entrar', perfil: p, pin }).clave };
+  const libro = (id, lectura, fin) => ({ id, titulo: 'L' + id, lectura, fin });
+  b.post({ accion: 'subirTodo', libros: [libro('a1', 'leido', '2026-02-01'), libro('a2', 'leido', '2026-09-30'), libro('a3', 'leido', '2025-12-31'), libro('a4', 'leyendo', '')], sagas: [], ...k.ana });
+  b.post({ accion: 'subirTodo', libros: [libro('l1', 'leido', '2026-05-05')], sagas: [], ...k.luis });
+  b.post({ accion: 'guardarReto', anio: '2026', meta: 20, ...k.ana });
+  return { b, k };
+}
+
+test('retos: leídos del año y meta de cada perfil, nada más', () => {
+  const { b, k } = conLibros();
+  const r = b.get({ accion: 'retos', anio: '2026', ...k.luis });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.retos.map(x => [x.perfil, x.leidos, x.meta, x.nombre]),
+    [['ana', 2, 20, ''], ['eva', 0, 0, ''], ['luis', 1, 0, 'Luis Gómez']]);
+  assert.deepEqual(Object.keys(r.retos[0]).sort(), ['leidos', 'meta', 'nombre', 'oculto', 'perfil']);
+  // eva no ha guardado nada: no se le crea la pestaña
+  assert.equal(b.hojas.LIBROS_eva, undefined);
+});
+
+test('retos: quien oculta su reto no sale para los demás, pero sí para sí mismo', () => {
+  const { b, k } = conLibros();
+  assert.deepEqual(b.post({ accion: 'guardarVisible', visible: false, ...k.ana }), { ok: true });
+  assert.equal(b.get({ accion: 'todo', ...k.ana }).visible, false);
+  assert.deepEqual(b.get({ accion: 'retos', anio: '2026', ...k.luis }).retos.map(x => x.perfil), ['eva', 'luis']);
+  const propio = b.get({ accion: 'retos', anio: '2026', ...k.ana }).retos.find(x => x.perfil === 'ana');
+  assert.equal(propio.oculto, true);
+  b.post({ accion: 'guardarVisible', visible: true, ...k.ana });
+  assert.equal(b.get({ accion: 'todo', ...k.ana }).visible, true);
+  assert.equal(b.get({ accion: 'retos', anio: '2026', ...k.luis }).retos.length, 3);
+});
+
+test('retos: sin clave o con un año raro se rechaza', () => {
+  const { b, k } = conLibros();
+  assert.deepEqual(b.get({ accion: 'retos', anio: '2026', perfil: 'ana', clave: 'x' }), { ok: false, error: 'clave' });
+  assert.deepEqual(b.get({ accion: 'retos', anio: '26', ...k.ana }), { ok: false, error: 'anio' });
+});

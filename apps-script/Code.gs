@@ -19,6 +19,10 @@
 // RETO: la meta de libros del año de cada perfil va en la propiedad
 // RETO_ana (la escribe la app; no hace falta tocarla a mano).
 //
+// RETOS DE TODOS: en Actividad cada perfil ve cuántos libros han leído los
+// demás este año y su meta (solo el número). Quien apaga «Mostrar mi reto a
+// los demás» queda en la propiedad OCULTAR_RETO_ana (la escribe la app).
+//
 // BÚSQUEDA: si Open Library y Google Books no conocen un ISBN, la app
 // pregunta al catálogo de la Biblioteca Nacional (SRU) por aquí (accion=bne).
 // No necesita clave.
@@ -70,9 +74,10 @@ function doGet(e) {
 
   switch (p.accion) {
     case 'ping':        return json({ ok: true });
-    case 'todo':        return json({ ok: true, libros: leer('LIBROS', p.perfil), sagas: leer('SAGAS', p.perfil), reto: leerReto(p.perfil), nombre: nombreDe(p.perfil) });
+    case 'todo':        return json({ ok: true, libros: leer('LIBROS', p.perfil), sagas: leer('SAGAS', p.perfil), reto: leerReto(p.perfil), nombre: nombreDe(p.perfil), visible: !retoOculto(p.perfil) });
     case 'googleBooks': return json(googleBooks(p.q));
     case 'bne':         return json(bne(p.isbn));
+    case 'retos':       return json(retosDeTodos(p.perfil, p.anio));
     default:            return json({ ok: false, error: 'accion desconocida' });
   }
 }
@@ -95,6 +100,7 @@ function doPost(e) {
       case 'guardarReto':
         if (!guardarReto(perfil, d.anio, d.meta)) return json({ ok: false, error: 'meta' });
         break;
+      case 'guardarVisible': guardarVisible(perfil, d.visible); break;
       case 'subirTodo':
         (d.libros || []).forEach(function (l) { guardar('LIBROS', perfil, l); });
         (d.sagas  || []).forEach(function (s) { guardar('SAGAS', perfil, s); });
@@ -247,6 +253,48 @@ function guardarReto(perfil, anio, meta) {
   reto[anio] = meta;
   PropertiesService.getScriptProperties().setProperty('RETO_' + perfil, JSON.stringify(reto));
   return true;
+}
+
+// ── RETOS DE TODOS ────────────────────────────
+// Por perfil: libros leídos en el año (lectura = leido y fin de ese año) y su
+// meta. Nada más: ni títulos ni el resto de la biblioteca. Los que ocultan su
+// reto no salen, salvo para sí mismos. No crea pestañas de quien no ha entrado.
+
+function retoOculto(perfil) {
+  return PropertiesService.getScriptProperties().getProperty('OCULTAR_RETO_' + perfil) === '1';
+}
+
+function guardarVisible(perfil, visible) {
+  const props = PropertiesService.getScriptProperties();
+  if (visible === false) props.setProperty('OCULTAR_RETO_' + perfil, '1');
+  else props.deleteProperty('OCULTAR_RETO_' + perfil);
+}
+
+function retosDeTodos(perfil, anio) {
+  anio = String(anio || '');
+  if (!/^\d{4}$/.test(anio)) return { ok: false, error: 'anio' };
+  const id = PropertiesService.getScriptProperties().getProperty('SHEET_ID');
+  const ss = id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();
+  const iLectura = CAMPOS_LIBRO.indexOf('lectura'), iFin = CAMPOS_LIBRO.indexOf('fin');
+  const retos = listarPerfiles()
+    .filter(function (p) { return p === perfil || !retoOculto(p); })
+    .map(function (p) {
+      const hoja = ss.getSheetByName('LIBROS_' + p);
+      let leidos = 0;
+      if (hoja && hoja.getLastRow() > 1) {
+        hoja.getRange(2, 1, hoja.getLastRow() - 1, CAMPOS_LIBRO.length).getValues().forEach(function (f) {
+          if (f[0] !== '' && f[iLectura] === 'leido' && anioDe(f[iFin]) === anio) leidos++;
+        });
+      }
+      return { perfil: p, nombre: nombreDe(p), meta: Number(leerReto(p)[anio]) || 0, leidos: leidos, oculto: retoOculto(p) };
+    });
+  return { ok: true, anio: anio, retos: retos };
+}
+
+// La fecha de fin es texto ("2026-09-26"); por si alguna celda quedó como fecha
+function anioDe(v) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return String(v.getFullYear());
+  return String(v || '').slice(0, 4);
 }
 
 // ── GOOGLE BOOKS (la clave no sale del servidor) ──
