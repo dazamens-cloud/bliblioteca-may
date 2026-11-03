@@ -89,10 +89,52 @@ Fuera del rediseño Noche porque obligan a guardar información que hoy no se gu
 - citas y notas al margen;
 - «Avisarme» cuando salga un tomo nuevo de una saga.
 
+## Amigos: ver las bibliotecas de otros
+
+Añadir amigos con un **código de invitación** y ver lo que tienen (lo que han leído,
+lo que leen ahora, sus valoraciones), sin poder tocarlo.
+
+- **Cómo:** cada persona tiene un código corto (por ejemplo `MAY-7K3Q`). Quien lo
+  introduce envía una solicitud; al aceptarla, los dos se ven. Se puede quitar a
+  alguien cuando se quiera.
+- **Qué se ve:** su biblioteca y sus sagas en modo lectura, su reto del año y lo que
+  está leyendo. Notas personales, préstamos y ubicación quedan privados. Opción de
+  esconder un libro concreto.
+- **Extras que salen casi solos:** «¿Quién lo tiene?» para pedirlo prestado, ver qué
+  libros de una saga tiene un amigo, y avisos de «Isa ha terminado Alas de sangre».
+- **Dónde encaja:** con Supabase es natural (una tabla `amistades` y permisos en la
+  base de datos). Con el Apps Script de ahora solo podría hacerse entre perfiles del
+  mismo Apps Script, sin códigos.
+- **Privacidad:** nada es visible hasta aceptar; borrar la cuenta borra también las
+  amistades. Hay que contarlo en la política de privacidad.
+
 ## Abrir la app a más gente y comercializarla
 
 Resumen completo, con tablas: https://claude.ai/artifact/RuuG5fG9ezCfPeMPBg525r
 (página privada del dueño del repo).
+
+**Plan paso a paso (noviembre 2026):** https://claude.ai/artifact/ANydTAzZvkYPToEqeXsY5z
+(también privado). Cuatro fases, unas 8 semanas:
+
+1. **Datos en Supabase** (región Fráncfort): tablas `libros`, `sagas`, `retos` con
+   Row Level Security; entrar con Google y con email en vez de PIN; la búsqueda de
+   Google Books y la BNE pasa a una Edge Function; botón «Borrar mi cuenta» (lo exige
+   Play); los libros de la hoja se suben a la cuenta de cada uno al entrar.
+2. **Dominio propio** en GitHub Pages: Play necesita `/.well-known/assetlinks.json` en
+   la raíz del dominio, y la dirección `github.io/bliblioteca-may/` es una subcarpeta.
+3. **Google Play** con PWABuilder (envoltorio TWA): cuenta de 25 $, guardar la llave
+   de firma, añadir a `assetlinks.json` también la huella con la que firma Play, y una
+   prueba cerrada con **12 probadores 14 días seguidos** (cuentas personales nuevas)
+   antes de poder publicar.
+4. **Legal y cobro** solo si se cobra: autónomo o sociedad, marca, Play Billing
+   (comisión del 15 %).
+
+**Después, app nativa con Capacitor** (no reescribirla): el mismo código web dentro
+de una app Android e iPhone con acceso a lo nativo. Cuándo: para entrar en la App
+Store, para notificaciones, para el escáner nativo (ML Kit) o para funcionar sin
+conexión. iPhone necesita un Mac o compilar en la nube, y la cuenta de Apple cuesta
+99 $/año. En Play sustituye al envoltorio como actualización si mantiene el mismo
+nombre de paquete y la misma llave.
 
 - **Técnico:** un backend común (por ejemplo Supabase) con cuentas de verdad en vez de
   un Apps Script por casa y PIN; escáner para iPhone. El diseño, las pantallas, las
