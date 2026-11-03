@@ -98,6 +98,11 @@ Si `URL_SCRIPT` se deja vacía, la URL se pega en Ajustes.
 **Reto anual:** cada perfil elige su meta de libros del año en Actividad. Se guarda en
 la propiedad del script `RETO_{perfil}`; no hay que crearla a mano.
 
+**Retos de todos:** en Actividad, cada perfil ve cuántos libros han leído los demás
+este año y su meta (solo el número, nada de su biblioteca). Quien apaga *Mostrar mi
+reto a los demás* en Perfil y ajustes deja de salir; la app lo guarda en la propiedad
+`OCULTAR_RETO_{perfil}`.
+
 Opcional: propiedad del script `GOOGLE_BOOKS_KEY` con una clave de Google Books
 (gratis). Sin ella, la búsqueda usa solo Open Library, que suele bastar.
 

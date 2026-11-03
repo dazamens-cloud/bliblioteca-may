@@ -201,6 +201,62 @@ function guardarNombres(nuevos) {
   guardarLS(LS.nombres, nombres);
 }
 
+// ── RETOS DE TODOS ──────────────────────────
+// Cuántos libros han leído los demás perfiles este año y su meta (solo eso).
+// null = aún no se sabe; { ok:false } = Code.gs antiguo sin «retos».
+let retosTodos = null, retosCargados = 0;
+
+async function cargarRetosTodos(forzar) {
+  if (!conectado() || !navigator.onLine) return;
+  if (!forzar && Date.now() - retosCargados < 60000) return;
+  retosCargados = Date.now();
+  try {
+    const r = await apiGet({ accion: 'retos', anio: String(new Date().getFullYear()) });
+    retosTodos = r && r.ok ? r : { ok: false };
+  } catch (e) {
+    console.warn('Retos:', e.message);
+    return;
+  }
+  pintarRetosTodos();
+  renderAjustes();
+}
+
+const retoVisible = () => leerLS(lsDatos('visible'), true) !== false;
+
+function cambiarVisible(visible) {
+  guardarLS(lsDatos('visible'), visible);
+  encolar({ accion: 'guardarVisible', visible });
+  toast(visible ? 'Los demás verán cuántos libros llevas este año' : 'Tu reto ya no sale a los demás');
+  retosCargados = 0;
+}
+
+function pintarRetosTodos() {
+  const caja = $('#retosTodos');
+  if (!caja) return;
+  const anio = new Date().getFullYear();
+  if (!conectado() || !retosTodos || !retosTodos.ok || String(retosTodos.anio) !== String(anio)) { caja.hidden = true; return; }
+  // Lo mío, con lo que hay en el móvil (puede ir por delante de la hoja)
+  const filas = retosTodos.retos.map(x => x.perfil === config.perfil
+    ? { ...x, leidos: leidosDelAnio(libros, anio).length, meta: Number(reto[anio]) || 0, yo: true }
+    : x);
+  if (filas.length < 2) { caja.hidden = true; return; }
+  filas.sort((a, b) => b.leidos - a.leidos || (a.nombre || a.perfil).localeCompare(b.nombre || b.perfil, 'es'));
+  const yo = filas.find(x => x.yo);
+  caja.hidden = false;
+  caja.innerHTML = `
+    <div class="titulo-seccion"><h2>Retos de ${anio}</h2><span>${filas.length} personas</span></div>
+    <div class="reparto">
+      ${filas.map(x => {
+        const nombre = esc(x.nombre || nombrePerfil(x.perfil)) + (x.yo ? ' <small>(tú)</small>' : '');
+        if (!x.meta) return `<div class="fila-reparto"><span>${nombre}</span><b>${x.leidos === 1 ? '1 leído' : x.leidos + ' leídos'} · sin reto</b></div>`;
+        const pct = Math.min(100, Math.round(x.leidos / x.meta * 100));
+        return `<div class="fila-reparto"><span>${nombre}</span><b>${x.leidos} / ${x.meta}</b>
+          <div class="barra${x.leidos >= x.meta ? ' completa' : ''}"><div style="width:${pct}%"></div></div></div>`;
+      }).join('')}
+    </div>
+    <p class="sub">${yo && yo.oculto ? 'Tu reto está oculto: solo lo ves tú.' : 'Solo se comparte cuántos libros lleváis y la meta.'} Se cambia en Perfil y ajustes.</p>`;
+}
+
 async function apiGet(params, ms = 20000) {
   const q = new URLSearchParams({ ...params, perfil: config.perfil, clave: config.clave });
   const r = await (await fetchT(config.url + '?' + q, {}, ms)).json();
@@ -232,9 +288,9 @@ async function vaciarCola() {
   try {
     while (cola.length) {
       const r = await apiPost(cola[0]);
-      // Un Code.gs anterior al reto responde "accion desconocida", y una meta rechazada
+      // Un Code.gs anterior al reto (o al interruptor de retos) responde "accion desconocida", y una meta rechazada
       // no se arregla reintentando: se descarta ese envío para no atascar la cola
-      if (cola[0].accion === 'guardarReto' && r && !r.ok && r.error !== 'clave') {
+      if (['guardarReto', 'guardarVisible'].includes(cola[0].accion) && r && !r.ok && r.error !== 'clave') {
         cola.shift();
         guardarLS(lsDatos('cola'), cola);
         continue;
@@ -264,6 +320,7 @@ async function descargar() {
     libros = r.libros.map(normalizarLibro);
     sagas  = r.sagas.map(normalizarSaga);
     repararNumerosSaga();
+    if (typeof r.visible === 'boolean') guardarLS(lsDatos('visible'), r.visible);
     // Un Code.gs anterior a los nombres no manda "nombre": se deja el que hubiera
     if ('nombre' in r) {
       const n = { ...nombres };
@@ -274,6 +331,7 @@ async function descargar() {
     guardarLocal();
     config.error = '';
     renderTodo();
+    cargarRetosTodos(true);
   } catch (e) {
     console.warn('Descarga:', e.message);
     config.error = e.message;
@@ -368,6 +426,7 @@ async function entrarPerfil(perfil, pin) {
 // entrar con el PIN se siguen viendo sin conexión.
 function salirPerfil() {
   config = { url: URL_SCRIPT || config.url, perfil: '', clave: '' };
+  retosTodos = null; retosCargados = 0;
   guardarConfig();
   cargarDatos();
   renderTodo();
@@ -624,6 +683,7 @@ const NOMBRES_SECCION = {
 
 function irA(id) {
   if (id !== 'screenAnadir') pararEscaner();
+  if (id === 'screenActividad') cargarRetosTodos();
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
   document.querySelectorAll('nav.bottom button').forEach(b => b.classList.toggle('active', b.dataset.screen === id));
   $('#nombreSeccion').textContent = NOMBRES_SECCION[id] || '';
@@ -1482,6 +1542,8 @@ function renderActividad() {
       </div>
     </section>
 
+    <section class="bloque-act" id="retosTodos" hidden></section>
+
     <div class="cifras-act">
       <div class="cifra-act"><small>Páginas leídas</small><b>${paginasDelAnio(libros, anio).toLocaleString('es-ES')}</b><span>en ${anio}</span></div>
       <div class="cifra-act"><small>Este año</small><b>${delAnio}</b><span>${delAnio === 1 ? 'libro leído' : 'libros leídos'}</span></div>
@@ -1517,6 +1579,7 @@ function renderActividad() {
     guardarMeta(anio, nueva);
     toast('🎯 Tu meta de ' + anio + ': ' + nueva + (nueva === 1 ? ' libro' : ' libros'));
   };
+  pintarRetosTodos();
 }
 
 // ── AJUSTES ─────────────────────────────────
@@ -1527,6 +1590,9 @@ function renderAjustes() {
   $('#formPerfil').hidden = conectado();
   $('#bloqueConectado').hidden = !conectado();
   $('#perfilActual').textContent = nombrePerfil(config.perfil);
+  // El interruptor solo si el Code.gs ya sabe de retos
+  $('#bloqueVisible').hidden = !(conectado() && retosTodos && retosTodos.ok);
+  $('#cfgVisible').checked = retoVisible();
   pintarAvatar();
   if (!conectado() && !$('#cfgPerfil').value) cargarPerfiles();
   pintarSync();
@@ -1643,6 +1709,7 @@ function engancharEventos() {
 
   $('#formPerfil').onsubmit = e => { e.preventDefault(); entrarPerfil($('#cfgPerfil').value, $('#cfgPin').value.trim()); };
   $('#cfgUrl').onchange = cargarPerfiles;
+  $('#cfgVisible').onchange = e => cambiarVisible(e.target.checked);
   $('#btnSincronizar').onclick = async () => { toast('Sincronizando…', { ms: 0 }); await descargar(); toast(config.error ? '⚠️ ' + esc(config.error) : '☁️ Al día'); };
   $('#btnSalir').onclick = () => {
     if (cola.length && !confirm('Hay ' + cola.length + ' cambios sin enviar a la hoja. Se enviarán cuando vuelvas a entrar. ¿Salir?')) return;
