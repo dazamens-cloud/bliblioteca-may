@@ -1295,6 +1295,13 @@ function renderSagas() {
   const todas = sagas.map(s => ({ s, p: progresoSaga(s) }));
   const completas = todas.filter(x => x.p.faltanTener === 0).length;
 
+  // Libros que no pertenecen a ninguna saga: apartado propio al final de la pantalla
+  const sueltos = libros.filter(l => !sagaDe(l)).sort((a, b) => String(a.titulo).localeCompare(String(b.titulo), 'es'));
+  const bloqueSueltos = sueltos.length ? `<section class="sueltos">
+      <div class="ceja">Sueltos · ${sueltos.length === 1 ? '1 libro' : sueltos.length + ' libros'}</div>
+      ${sueltos.map(tarjetaLibro).join('')}
+    </section>` : '';
+
   $('#resumenSagas').innerHTML = sagas.length ? `<div class="resumen-sagas">
       <span class="cuadro">${ic('collections_bookmark')}</span>
       <div>
@@ -1313,12 +1320,12 @@ function renderSagas() {
       <h2>Aún no hay sagas</h2>
       <p>Se crean solas cuando añades un libro que forma parte de una. También puedes crear una a mano.</p>
       <button class="btn" data-nueva-saga>${ic('add')}Crear una saga a mano</button>
-    </div>`;
+    </div>${bloqueSueltos}`;
     return;
   }
   const lista = todas.filter(x => FILTROS_SAGA[filtroSagas].f(x.p))
     .sort((a, b) => (a.p.faltanTener === 0) - (b.p.faltanTener === 0) || a.s.nombre.localeCompare(b.s.nombre));
-  cont.innerHTML = lista.length ? lista.map(({ s, p }) => {
+  cont.innerHTML = (lista.length ? lista.map(({ s, p }) => {
     const pct = p.total ? Math.round(p.tienes / p.total * 100) : 0;
     return `<article class="saga" data-abrir-saga="${esc(s.id)}">
       <div class="cab">
@@ -1334,7 +1341,7 @@ function renderSagas() {
       <div class="cifras"><span>${p.tienes} de ${p.total} en casa · ${p.leidos} ${p.leidos === 1 ? 'leído' : 'leídos'}</span><span class="pct">${pct}%</span></div>
       <div class="tomos">${p.filas.map((f, i) => tomoHTML(s, f, i)).join('')}</div>
     </article>`;
-  }).join('') : '<p class="vacio">Ninguna saga con ese filtro.</p>';
+  }).join('') : '<p class="vacio">Ninguna saga con ese filtro.</p>') + bloqueSueltos;
 }
 
 function abrirSaga(id) {
