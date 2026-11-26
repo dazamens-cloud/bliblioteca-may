@@ -224,10 +224,15 @@ function guardarLote(nombre, perfil, objs) {
   const datos = ultima > 1 ? hoja.getRange(2, 1, ultima - 1, campos.length).getValues() : [];
   const posicion = {};
   datos.forEach(function (fila, i) { if (fila[0] !== '') posicion[String(fila[0])] = i; });
+  const idxAct = campos.indexOf('actualizado');
   validos.forEach(function (obj) {
     const fila = filaDe(nombre, obj);
     const i = posicion[String(obj.id)];
-    if (i !== undefined) datos[i] = fila;
+    if (i !== undefined) {
+      // No se pisa una versión más reciente que la que llega (p. ej. una subida desde un móvil con datos viejos)
+      if (idxAct >= 0 && String(datos[i][idxAct]) > String(fila[idxAct])) return;
+      datos[i] = fila;
+    }
     else { posicion[String(obj.id)] = datos.length; datos.push(fila); }
   });
   hoja.getRange(2, 1, datos.length, campos.length).setNumberFormat('@').setValues(datos);

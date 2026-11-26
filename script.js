@@ -1007,6 +1007,7 @@ function abrirDetalle(id) {
           <div class="estrellas" data-campo="valoracion">
             ${[1, 2, 3, 4, 5].map(n => `<button data-valor="${n}" class="${l.valoracion >= n ? 'on' : ''}" aria-label="${n} estrellas">★</button>`).join('')}
           </div>
+          ${l.valoracion ? '<button class="btn-link" data-quitar-valoracion>Quitar valoración</button>' : ''}
         </div>
       </div>
 
@@ -1053,7 +1054,8 @@ function cambiarCampo(id, campo, valor) {
   if (!l) return;
   const antes = l.lectura;
   if (campo === 'tengo') valor = valor === 'true';
-  if (campo === 'valoracion') valor = l.valoracion === Number(valor) ? 0 : Number(valor);
+  // Tocar una estrella fija esa valoración; quitarla es solo con el botón "Quitar valoración"
+  if (campo === 'valoracion') valor = Number(valor) || 0;
   if (['saga_num', 'pagina', 'paginas'].includes(campo)) valor = valor === '' ? '' : Number(valor);
   if (campo === 'isbn') {
     valor = limpiarIsbn(valor);
@@ -1789,7 +1791,7 @@ function engancharEventos() {
 
   // Delegación: todo lo que se pinta dinámicamente
   document.addEventListener('click', e => {
-    const t = e.target.closest('[data-libro],[data-resultado],[data-cerrar],[data-ir],[data-manual],[data-abrir-saga],[data-buscar-saga],[data-borrar-libro],[data-borrar-saga],[data-editar-saga],[data-crear-de-saga],[data-sumar-paginas],[data-terminar],[data-poner-ubicacion],[data-nueva-saga],[data-quiero-tomo],[data-reanudar],.segmentado[data-campo] button,.estrellas button');
+    const t = e.target.closest('[data-libro],[data-resultado],[data-cerrar],[data-ir],[data-manual],[data-abrir-saga],[data-buscar-saga],[data-borrar-libro],[data-borrar-saga],[data-editar-saga],[data-crear-de-saga],[data-sumar-paginas],[data-terminar],[data-poner-ubicacion],[data-nueva-saga],[data-quiero-tomo],[data-reanudar],[data-quitar-valoracion],.segmentado[data-campo] button,.estrellas button');
     if (!t) return;
     const ds = t.dataset;
 
@@ -1797,6 +1799,7 @@ function engancharEventos() {
       const id = t.closest('.detalle').dataset.id;
       cambiarCampo(id, t.parentElement.dataset.campo, ds.valor);
     }
+    else if (ds.quitarValoracion !== undefined) { cambiarCampo(t.closest('.detalle').dataset.id, 'valoracion', 0); }
     else if (ds.libro)                   { abrirDetalle(ds.libro); }
     else if (ds.resultado !== undefined) { abrirPreview($('#resultados')._datos[Number(ds.resultado)]); }
     else if (ds.cerrar !== undefined)    { cerrarModal(); }
