@@ -12,6 +12,9 @@ function crearHoja() {
     getMaxRows: () => 1000,
     setFrozenRows() {},
     getLastRow: () => filas.length,
+    getLastColumn: () => Math.max(0, ...filas.map(f => f.length)),
+    getMaxColumns: () => 100,
+    insertColumnsAfter() {},
     deleteRow: n => { filas.splice(n - 1, 1); },
     getRange: (r, c, nr = 1, nc = 1) => ({
       setNumberFormat() { return this; },

@@ -33,7 +33,7 @@
 
 const CAMPOS_LIBRO = ['id', 'isbn', 'titulo', 'autor', 'portada', 'paginas', 'editorial', 'anio',
   'tipo', 'tengo', 'lectura', 'saga_id', 'saga_num', 'prestado_a', 'valoracion', 'notas',
-  'alta', 'fin', 'saga_buscada', 'actualizado', 'ubicacion', 'pagina'];
+  'alta', 'fin', 'saga_buscada', 'actualizado', 'ubicacion', 'pagina', 'edicion'];
 // Campos nuevos: siempre AL FINAL. Las filas se leen por posición.
 const CAMPOS_SAGA = ['id', 'nombre', 'autor', 'fuente', 'wikidata', 'libros', 'actualizado'];
 
@@ -276,8 +276,21 @@ function obtenerHoja(nombre, perfil) {
     hoja.getRange(1, 1, hoja.getMaxRows(), campos.length).setNumberFormat('@');
     hoja.getRange(1, 1, 1, campos.length).setValues([campos]).setFontWeight('bold');
     hoja.setFrozenRows(1);
+  } else {
+    asegurarColumnas(hoja, HOJAS[nombre]);
   }
   return hoja;
+}
+
+// Una pestaña creada antes de un campo nuevo no tiene su columna: se añade al final
+function asegurarColumnas(hoja, campos) {
+  const ancho = Math.max(hoja.getLastColumn(), 1);
+  const cab = hoja.getRange(1, 1, 1, ancho).getValues()[0];
+  const faltan = campos.filter(function (c) { return cab.indexOf(c) < 0; });
+  if (!faltan.length) return;
+  const hay = hoja.getMaxColumns();
+  if (hay < ancho + faltan.length) hoja.insertColumnsAfter(hay, ancho + faltan.length - hay);
+  hoja.getRange(1, ancho + 1, 1, faltan.length).setValues([faltan]).setFontWeight('bold');
 }
 
 // ── RETO ANUAL ────────────────────────────────
@@ -324,6 +337,7 @@ function retosDeTodos(perfil, anio) {
     .filter(function (p) { return p === perfil || !retoOculto(p); })
     .map(function (p) {
       const hoja = ss.getSheetByName('LIBROS_' + p);
+      if (hoja) asegurarColumnas(hoja, CAMPOS_LIBRO);
       let leidos = 0;
       if (hoja && hoja.getLastRow() > 1) {
         hoja.getRange(2, 1, hoja.getLastRow() - 1, CAMPOS_LIBRO.length).getValues().forEach(function (f) {

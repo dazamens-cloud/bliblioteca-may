@@ -31,7 +31,7 @@ const LIBRO_VACIO = {
   id: '', isbn: '', titulo: '', autor: '', portada: '', paginas: '', editorial: '', anio: '',
   tipo: 'libro', tengo: true, lectura: 'pendiente', saga_id: '', saga_num: '', prestado_a: '',
   valoracion: 0, notas: '', alta: '', fin: '', saga_buscada: false, actualizado: '',
-  ubicacion: '', pagina: ''
+  ubicacion: '', pagina: '', edicion: ''
 };
 
 // ── ESTADO GLOBAL ───────────────────────────
@@ -843,7 +843,9 @@ function tarjetaPausada(l) {
 function renderBiblioteca() {
   const q = norm($('#buscador').value);
   const orden = { leyendo: 0, pendiente: 1, leido: 2, abandonado: 3 };
+  // Las ediciones especiales (coleccionista…) van en su apartado, no en la estantería
   const lista = libros
+    .filter(l => !l.edicion)
     .filter(FILTROS[filtro])
     .filter(l => filtro !== 'valorados' || !filtroEstrellas || l.valoracion === filtroEstrellas)
     .filter(l => !q || norm([l.titulo, l.autor, l.ubicacion, (sagaDe(l) || {}).nombre].join(' ')).includes(q))
@@ -898,6 +900,12 @@ function renderBiblioteca() {
     if (pausados.length && filtro === 'todos' && !q) {
       panel += `<div class="titulo-seccion"><h2>En pausa</h2><span>${pausados.length === 1 ? '1 libro' : pausados.length + ' libros'}</span></div>`;
       panel += pausados.map(tarjetaPausada).join('');
+    }
+
+    const ediciones = libros.filter(l => l.edicion).sort((a, b) => String(a.titulo).localeCompare(String(b.titulo), 'es'));
+    if (ediciones.length && filtro === 'todos' && !q) {
+      panel += `<div class="titulo-seccion"><h2>Ediciones especiales</h2><span>${ediciones.length === 1 ? '1 libro' : ediciones.length + ' libros'}</span></div>`;
+      panel += ediciones.map(tarjetaLibro).join('');
     }
   }
   $('#panelResumen').innerHTML = panel;
@@ -1025,6 +1033,7 @@ function abrirDetalle(id) {
       <details>
         <summary>Editar datos del libro</summary>
         <label>Título <input data-campo="titulo" value="${esc(l.titulo)}"></label>
+        <label>Edición <input data-campo="edicion" value="${esc(l.edicion)}" placeholder="Ej. Coleccionista (vacío = edición normal)"></label>
         <label>Autor <input data-campo="autor" value="${esc(l.autor)}"></label>
         <label>Nº en la saga <input data-campo="saga_num" type="number" min="0" step="0.5" value="${esc(l.saga_num)}"></label>
         <label>Páginas <input data-campo="paginas" type="number" value="${esc(l.paginas)}"></label>
@@ -1085,11 +1094,11 @@ function sumarPaginas(id, n) {
 // varios con el mismo número (datos de antes del arreglo), el que encaje por título.
 function libroDeEntrada(s, e) {
   const encaja = l => mejorEntrada(s.libros, l.titulo, s.nombre) === e;
-  const mismoNum = libros.filter(l => l.saga_id === s.id && l.saga_num !== '' && Number(l.saga_num) === Number(e.num));
+  const mismoNum = libros.filter(l => !l.edicion && l.saga_id === s.id && l.saga_num !== '' && Number(l.saga_num) === Number(e.num));
   // Por título solo los que aún no tienen número en esta saga: uno que ya es
   // el 1 no puede aparecer también en la fila 3
   return (mismoNum.length > 1 && mismoNum.find(encaja)) || mismoNum[0] ||
-         libros.find(l => (!l.saga_id || (l.saga_id === s.id && l.saga_num === '')) && encaja(l));
+         libros.find(l => !l.edicion && (!l.saga_id || (l.saga_id === s.id && l.saga_num === '')) && encaja(l));
 }
 
 // Libros de una misma saga con el mismo número: antes, en sagas cuyo nombre va
@@ -1297,7 +1306,7 @@ function renderSagas() {
   const completas = todas.filter(x => x.p.faltanTener === 0).length;
 
   // Libros que no pertenecen a ninguna saga: apartado propio al final de la pantalla
-  const sueltos = libros.filter(l => !sagaDe(l)).sort((a, b) => String(a.titulo).localeCompare(String(b.titulo), 'es'));
+  const sueltos = libros.filter(l => !sagaDe(l) && !l.edicion).sort((a, b) => String(a.titulo).localeCompare(String(b.titulo), 'es'));
   const bloqueSueltos = sueltos.length ? `<section class="sueltos">
       <div class="ceja">Sueltos · ${sueltos.length === 1 ? '1 libro' : sueltos.length + ' libros'}</div>
       ${sueltos.map(tarjetaLibro).join('')}
