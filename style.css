@@ -195,7 +195,7 @@ form.buscar input { flex: 1; }
 
 /* ── Resumen (Biblioteca) ─────────────────── */
 #panelResumen { display: flex; flex-direction: column; gap: 12px; }
-.metricas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.metricas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .metrica {
   background: var(--sup); border-radius: 14px; padding: 10px 12px;
   box-shadow: inset 0 0 0 1px var(--borde-suave);

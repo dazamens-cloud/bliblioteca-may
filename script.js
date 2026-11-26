@@ -869,6 +869,7 @@ function renderBiblioteca() {
     const leidos = libros.filter(l => l.lectura === 'leido').length;
     const esteAnio = leidosDelAnio(libros, new Date().getFullYear()).length;
     panel += `<div class="metricas">
+      <div class="metrica"><div class="et">Registrados</div><div class="num">${libros.length}</div><div class="sub">en total</div></div>
       <div class="metrica"><div class="et">En casa</div><div class="num">${tengo}</div><div class="sub">${tengo === 1 ? 'libro' : 'libros'}</div></div>
       <div class="metrica activa"><div class="et">● Leyendo</div><div class="num">${leyendo.length}</div><div class="sub">ahora</div></div>
       <div class="metrica"><div class="et">Leídos</div><div class="num">${leidos}</div><div class="sub">${esteAnio} este año</div></div>
