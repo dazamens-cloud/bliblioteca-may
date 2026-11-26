@@ -103,8 +103,9 @@ function doPost(e) {
         break;
       case 'guardarVisible': guardarVisible(perfil, d.visible); break;
       case 'subirTodo':
-        (d.libros || []).forEach(function (l) { guardar('LIBROS', perfil, l); });
-        (d.sagas  || []).forEach(function (s) { guardar('SAGAS', perfil, s); });
+        // Puede llegar troceada: cada envío trae sus libros y, en el primero, las sagas
+        guardarLote('LIBROS', perfil, d.libros);
+        guardarLote('SAGAS', perfil, d.sagas);
         break;
       default: return json({ ok: false, error: 'accion desconocida' });
     }
@@ -190,20 +191,46 @@ function leer(nombre, perfil) {
     });
 }
 
-function guardar(nombre, perfil, obj) {
-  if (!obj || !obj.id) return;
-  const hoja = obtenerHoja(nombre, perfil);
-  const campos = HOJAS[nombre];
-  const fila = campos.map(function (c) {
+// La fila de la hoja para un objeto: una celda por campo, en el orden de HOJAS
+function filaDe(nombre, obj) {
+  return HOJAS[nombre].map(function (c) {
     const v = obj[c];
     if (v === undefined || v === null) return '';
     if (typeof v === 'object') return JSON.stringify(v);
     return String(v);
   });
+}
+
+function guardar(nombre, perfil, obj) {
+  if (!obj || !obj.id) return;
+  const hoja = obtenerHoja(nombre, perfil);
+  const campos = HOJAS[nombre];
   const n = buscarFila(hoja, obj.id);
   const rango = n ? hoja.getRange(n, 1, 1, campos.length)
                   : hoja.getRange(hoja.getLastRow() + 1, 1, 1, campos.length);
-  rango.setNumberFormat('@').setValues([fila]);
+  rango.setNumberFormat('@').setValues([filaDe(nombre, obj)]);
+}
+
+// Muchos objetos a la vez (una subida completa): se lee la hoja una vez, se
+// cambian las filas en memoria y se escribe todo en una sola llamada.
+// Con una escritura por libro, cientos de libros tardaban minutos y el móvil
+// se quedaba esperando.
+function guardarLote(nombre, perfil, objs) {
+  const validos = (objs || []).filter(function (o) { return o && o.id; });
+  if (!validos.length) return;
+  const hoja = obtenerHoja(nombre, perfil);
+  const campos = HOJAS[nombre];
+  const ultima = hoja.getLastRow();
+  const datos = ultima > 1 ? hoja.getRange(2, 1, ultima - 1, campos.length).getValues() : [];
+  const posicion = {};
+  datos.forEach(function (fila, i) { if (fila[0] !== '') posicion[String(fila[0])] = i; });
+  validos.forEach(function (obj) {
+    const fila = filaDe(nombre, obj);
+    const i = posicion[String(obj.id)];
+    if (i !== undefined) datos[i] = fila;
+    else { posicion[String(obj.id)] = datos.length; datos.push(fila); }
+  });
+  hoja.getRange(2, 1, datos.length, campos.length).setNumberFormat('@').setValues(datos);
 }
 
 function borrar(nombre, perfil, id) {

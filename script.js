@@ -296,8 +296,24 @@ function encolar(payload) {
   vaciarCola();
 }
 
-async function vaciarCola() {
+// Una subida completa va en trozos de 100 libros: cada envío cabe en el tiempo de espera.
+// Las sagas van en el primero.
+function trozosSubida(libros, sagas) {
+  const out = [];
+  for (let i = 0; i < libros.length; i += 100) out.push({ accion: 'subirTodo', libros: libros.slice(i, i + 100), sagas: [] });
+  if (!out.length) out.push({ accion: 'subirTodo', libros: [], sagas: [] });
+  out[0].sagas = sagas;
+  return out;
+}
+
+// Tras un fallo no se reintenta en bucle: se espera un minuto (o se pulsa Sincronizar).
+// Así una petición lenta no se multiplica con cada cambio o cada vez que vuelves a la app.
+let reintentoEn = 0;
+let temporizadorCola = null;
+
+async function vaciarCola(forzar = false) {
   if (enviando || !conectado() || !navigator.onLine) { pintarSync(); return; }
+  if (!forzar && Date.now() < reintentoEn) { pintarSync(); return; }
   enviando = true;
   pintarSync();
   try {
@@ -321,9 +337,13 @@ async function vaciarCola() {
       guardarLS(lsDatos('cola'), cola);
     }
     config.error = '';
+    reintentoEn = 0;
   } catch (e) {
     console.warn('Sincronización:', e.message);
     config.error = e.message;
+    reintentoEn = Date.now() + 60000;
+    clearTimeout(temporizadorCola);
+    temporizadorCola = setTimeout(() => vaciarCola(), 60000);
   } finally {
     enviando = false;
     pintarSync();
@@ -331,9 +351,9 @@ async function vaciarCola() {
 }
 
 // Trae la hoja y reemplaza lo local. Solo si no quedan cambios sin enviar.
-async function descargar() {
+async function descargar(forzar = false) {
   if (!conectado() || !navigator.onLine) return;
-  await vaciarCola();
+  await vaciarCola(forzar);
   if (cola.length) return;
   const version = cambiosVersion;
   try {
@@ -432,10 +452,10 @@ async function entrarPerfil(perfil, pin) {
     guardarConfig();
     // Ya están guardados en el perfil: ahora sí se pueden quitar de "sin perfil"
     if (heredar) ['libros', 'sagas', 'cola'].forEach(k => localStorage.removeItem(lsDatos(k, '')));
-    cola = [{ accion: 'subirTodo', libros, sagas }];
+    cola = trozosSubida(libros, sagas);
     guardarLS(lsDatos('cola'), cola);
     $('#cfgPin').value = '';
-    await vaciarCola();
+    await vaciarCola(true);
     toast('✅ Hola, ' + esc(nombrePerfil(perfil)) + '. ' + libros.length + ' libros.');
   } catch (e) {
     config = configGuardada();
@@ -1641,7 +1661,11 @@ async function importar(fichero) {
     libros = combinar(libros, d.libros.map(normalizarLibro));
     sagas  = combinar(sagas, (d.sagas || []).map(normalizarSaga));
     guardarLocal();
-    encolar({ accion: 'subirTodo', libros, sagas });
+    if (conectado()) {
+      cola.push(...trozosSubida(libros, sagas));
+      guardarLS(lsDatos('cola'), cola);
+      vaciarCola();
+    }
     renderTodo();
     toast('✅ Copia importada: ' + d.libros.length + ' libros');
   } catch (e) {
@@ -1736,7 +1760,7 @@ function engancharEventos() {
   $('#formPerfil').onsubmit = e => { e.preventDefault(); entrarPerfil($('#cfgPerfil').value, $('#cfgPin').value.trim()); };
   $('#cfgUrl').onchange = cargarPerfiles;
   $('#cfgVisible').onchange = e => cambiarVisible(e.target.checked);
-  $('#btnSincronizar').onclick = async () => { toast('Sincronizando…', { ms: 0 }); await descargar(); toast(config.error ? '⚠️ ' + esc(config.error) : '☁️ Al día'); };
+  $('#btnSincronizar').onclick = async () => { toast('Sincronizando…', { ms: 0 }); await descargar(true); toast(config.error ? '⚠️ ' + esc(config.error) : '☁️ Al día'); };
   $('#btnSalir').onclick = () => {
     if (cola.length && !confirm('Hay ' + cola.length + ' cambios sin enviar a la hoja. Se enviarán cuando vuelvas a entrar. ¿Salir?')) return;
     salirPerfil();
