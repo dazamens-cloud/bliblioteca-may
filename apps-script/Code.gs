@@ -94,6 +94,7 @@ function doPost(e) {
   try {
     switch (d.accion) {
       case 'guardarLibro': guardar('LIBROS', perfil, d.libro); break;
+      case 'actualizarCampos': actualizarCampos('LIBROS', perfil, d.id, d.campos); break;
       case 'borrarLibro':  borrar('LIBROS', perfil, d.id);     break;
       case 'guardarSaga':  guardar('SAGAS', perfil, d.saga);   break;
       case 'borrarSaga':   borrar('SAGAS', perfil, d.id);      break;
@@ -209,6 +210,22 @@ function borrar(nombre, perfil, id) {
   const hoja = obtenerHoja(nombre, perfil);
   const n = buscarFila(hoja, id);
   if (n) hoja.deleteRow(n);
+}
+
+// Escribe solo las columnas que llegan: un móvil con datos viejos no pisa el resto de la fila
+function actualizarCampos(nombre, perfil, id, campos) {
+  if (!id || !campos) return;
+  const hoja = obtenerHoja(nombre, perfil);
+  const n = buscarFila(hoja, id);
+  if (!n) return; // la fila aún no existe: su alta va antes en la cola y llegará primero
+  const columnas = HOJAS[nombre];
+  Object.keys(campos).forEach(function (c) {
+    const i = columnas.indexOf(c);
+    if (i < 0 || c === 'id') return;
+    const v = campos[c];
+    const texto = v === undefined || v === null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+    hoja.getRange(n, i + 1).setNumberFormat('@').setValue(texto);
+  });
 }
 
 function buscarFila(hoja, id) {

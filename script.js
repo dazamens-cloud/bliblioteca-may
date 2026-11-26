@@ -43,6 +43,7 @@ let config = {};          // { url, perfil, clave } de la Web App de Apps Script
 let filtro = 'todos';
 let filtroEstrellas = 0;  // dentro de "Valorados": 0 = todos los puntuados, 1-5 = solo esos
 let enviando = false;
+let cambiosVersion = 0;   // sube con cada cambio local: si cambia durante una descarga, la descarga está vieja
 let modalAbierto = false;
 let escaner = null;       // { stream, timer }
 
@@ -127,6 +128,7 @@ function guardarConfig() {
 }
 
 function guardarLocal() {
+  cambiosVersion++;
   guardarLS(lsDatos('libros'), libros);
   guardarLS(lsDatos('sagas'), sagas);
 }
@@ -137,6 +139,19 @@ function guardarLibro(l) {
   if (i >= 0) libros[i] = l; else libros.push(l);
   guardarLocal();
   encolar({ accion: 'guardarLibro', libro: l });
+  renderTodo();
+}
+
+// Envía solo los campos que cambiaron: así un móvil con datos viejos no pisa el resto del libro.
+// Lleva también la fila entera por si el Code.gs aún es el anterior (ver vaciarCola).
+function guardarCampos(l, campos) {
+  l.actualizado = ahora();
+  const i = libros.findIndex(x => x.id === l.id);
+  if (i >= 0) libros[i] = l; else libros.push(l);
+  guardarLocal();
+  const parche = { actualizado: l.actualizado };
+  for (const c of campos) parche[c] = l[c];
+  encolar({ accion: 'actualizarCampos', id: l.id, campos: parche, libro: { ...l } });
   renderTodo();
 }
 
@@ -172,7 +187,7 @@ function guardarSaga(s) {
 
 function borrarSaga(id) {
   sagas = sagas.filter(s => s.id !== id);
-  libros.filter(l => l.saga_id === id).forEach(l => { l.saga_id = ''; l.saga_num = ''; guardarLibro(l); });
+  libros.filter(l => l.saga_id === id).forEach(l => { l.saga_id = ''; l.saga_num = ''; guardarCampos(l, ['saga_id', 'saga_num']); });
   guardarLocal();
   encolar({ accion: 'borrarSaga', id });
   renderTodo();
@@ -295,6 +310,12 @@ async function vaciarCola() {
         guardarLS(lsDatos('cola'), cola);
         continue;
       }
+      // Code.gs anterior a actualizarCampos: se manda la fila entera, como antes
+      if (cola[0].accion === 'actualizarCampos' && r && r.error === 'accion desconocida' && cola[0].libro) {
+        cola[0] = { accion: 'guardarLibro', libro: cola[0].libro };
+        guardarLS(lsDatos('cola'), cola);
+        continue;
+      }
       if (!r || !r.ok) throw new Error((r && r.error) || 'sin respuesta');
       cola.shift();
       guardarLS(lsDatos('cola'), cola);
@@ -314,9 +335,12 @@ async function descargar() {
   if (!conectado() || !navigator.onLine) return;
   await vaciarCola();
   if (cola.length) return;
+  const version = cambiosVersion;
   try {
     const r = await apiGet({ accion: 'todo' });
     if (!r.ok) throw new Error(r.error);
+    // Si se tocó algo mientras se bajaba la hoja, esta copia ya está vieja: no se aplica
+    if (version !== cambiosVersion || cola.length) { pintarSync(); return; }
     libros = r.libros.map(normalizarLibro);
     sagas  = r.sagas.map(normalizarSaga);
     repararNumerosSaga();
@@ -1010,11 +1034,13 @@ function cambiarCampo(id, campo, valor) {
     }
   }
   l[campo] = valor;
+  const campos = [campo];
   if (campo === 'lectura' && valor === 'leido') {
     if (!l.fin) l.fin = ahora().slice(0, 10);
-    if (l.paginas) l.pagina = l.paginas;
+    campos.push('fin');
+    if (l.paginas) { l.pagina = l.paginas; campos.push('pagina'); }
   }
-  guardarLibro(l);
+  guardarCampos(l, campos);
 
   if (['tengo', 'lectura', 'valoracion', 'pagina', 'ubicacion'].includes(campo) && modalAbierto) abrirDetalle(id);
   // Al empezar o terminar un libro: avisar de la saga (o buscarla)
@@ -1027,7 +1053,7 @@ function sumarPaginas(id, n) {
   let p = (Number(l.pagina) || 0) + n;
   if (l.paginas) p = Math.min(p, Number(l.paginas));
   l.pagina = p;
-  guardarLibro(l);
+  guardarCampos(l, ['pagina']);
   if (modalAbierto) abrirDetalle(id);
   if (l.paginas && p >= l.paginas) toast('¿Terminado? Toca aquí para marcarlo como leído', { ms: 6000, accion: () => cambiarCampo(id, 'lectura', 'leido') });
 }
@@ -1120,7 +1146,7 @@ async function comprobarSaga(l, manual) {
     const e = mejorEntrada(s.libros, l.titulo, s.nombre);
     if (e) {
       vincular(l, s, e.num);
-      guardarLibro(l);
+      guardarCampos(l, ['saga_id', 'saga_num']);
       avisarSaga(l, false);
       if (manual) abrirDetalle(l.id);
       return;
@@ -1132,7 +1158,7 @@ async function comprobarSaga(l, manual) {
   let propuesta = null;
   try { propuesta = await descubrirSaga(l); } catch (e) { console.warn(e); }
   l.saga_buscada = true;
-  guardarLibro(l);
+  guardarCampos(l, ['saga_buscada']);
 
   if (propuesta) {
     ocultarToast();
@@ -1207,11 +1233,11 @@ function abrirEditorSaga(saga, libro) {
     });
     guardarSaga(s);
 
-    if (libro && numEste !== null) { vincular(libro, s, numEste); guardarLibro(libro); }
+    if (libro && numEste !== null) { vincular(libro, s, numEste); guardarCampos(libro, ['saga_id', 'saga_num']); }
     // Enlazar otros libros que ya tuviera de esta saga
     libros.filter(l => !l.saga_id).forEach(l => {
       const e = mejorEntrada(s.libros, l.titulo, s.nombre);
-      if (e) { vincular(l, s, e.num); guardarLibro(l); }
+      if (e) { vincular(l, s, e.num); guardarCampos(l, ['saga_id', 'saga_num']); }
     });
 
     cerrarModal();
@@ -1767,6 +1793,8 @@ function engancharEventos() {
   });
 
   window.addEventListener('online', () => descargar());
+  // Al volver a la app (desbloquear el móvil, cambiar de app o pestaña) se resincroniza
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') descargar(); });
 }
 
 // ── ARRANQUE ────────────────────────────────
